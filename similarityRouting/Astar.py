@@ -29,7 +29,7 @@ class AStar:
         self.s_goal = s_goal
         self.heuristic_type = heuristic_type
         self.rtGraph  = rtGraph
-        self.detourCost = 0
+        self.detourCost = 2
         self.OPEN = []  # priority queue / OPEN set
         self.CLOSED = []  # CLOSED set / VISITED order
         self.PARENT = dict()  # recorded parent
@@ -181,19 +181,22 @@ def runTemplate(centerPts, obstacles, s_start, s_goal):
     
     #defined template
     path   = rtGraph.setNetTemplate(centerPts[0], 0, 2)  #tempalte   Z
+    path_obs_o   = rtGraph.setNetTemplate(centerPts[0], l-1, 2)  #tempalte   Z
     path_obs=[]
     if(len(centerPts) >1):
-        path_obs  = rtGraph.setNetTemplate(centerPts[1], 0, 2)  #show z template obstacle
+        path_obs     = rtGraph.setNetTemplate(centerPts[1], 0, 2)  #show z template obstacle
+        
     
     #initialized similarity graph
     rtGraph.calSmrWithBFS(path)
     rtGraph.drawSmrMap()
 
     #Set obstacle and show
+    obstacles.extend(path_obs_o)
     obstacles.extend(path_obs)
     rtGraph.set_obstacle(obstacles)  
     rtGraph.drawShapelyPolygon(obstacles, w, h)
-    plt.show()
+    # plt.show()
 
     """AStar"""
     astar         = AStar(rtGraph, s_start, s_goal, "manhattan")
@@ -225,9 +228,9 @@ if __name__ == '__main__':
     s_goal  = (45, 45, 0)
     tpZ     = [(30,10),(30,45),(40,45), (40,10),(45, 10), (45, 45)]
     # ob      = [[20, 15,0], [27, 15,0], [27, 20,0], [20, 20,0]]
-    # ob1      = [[37, 15,0], [41, 15,0], [41, 20,0], [37, 20,0]]
-    ob2      = [[37, 15,0], [46, 15,0], [46, 20,0], [37, 20,0]]
-    # runTemplate([tpZ], [ob2], s_start, s_goal)
+    ob1      = [[37, 15,0], [41, 15,0], [41, 20,0], [37, 20,0]]
+    # ob2      = [[37, 15,0], [46, 15,0], [46, 20,0], [37, 20,0]]
+    runTemplate([tpZ], [ob1], s_start, s_goal)
 
 
     #O shape
@@ -240,8 +243,9 @@ if __name__ == '__main__':
 
     #cross talk
     s_start = (4, 15, 0)
-    s_goal  = (30, 5, 0)
+    s_goal  = (40, 5, 0)
     tpZ     = [(4,15),(28,15),(28,5), (40,5)]
-    tpZ1    = [(6,10),(25,10),(25,27), (45,27)]
+    # tpZ1    = [(4,10),(25,10),(25,27), (45,27)]
+    tpZ1    = [(0,10),(25,10),(25,27), (49,27)]
     ob      = [(20, 15, 0), (30, 15,0), (30, 20,0), (20, 20,0)]
-    runTemplate([tpZ, tpZ1], [], s_start, s_goal)
+    # runTemplate([tpZ, tpZ1], [], s_start, s_goal)

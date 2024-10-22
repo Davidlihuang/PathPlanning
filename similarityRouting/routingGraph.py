@@ -182,7 +182,7 @@ class Grid3D:
       
         #visited sets
         visited = set()  # 记录访问过的节点
-        directions = [(-1, 0, 0), (1, 0,0), (0, -1,0), (0, 1,0)]
+        directions = [(-1, 0, 0), (1, 0,0), (0, -1,0), (0, 1,0), (0, 0, -1), (0, 0,1)]
 
         #initialized initial queue
         queue = deque()  # 使用队列存储待访问的节点
@@ -193,8 +193,25 @@ class Grid3D:
  
             # 遍历相邻节点
             smrVal = 0.0
+            neighbors = []
             for direction in directions:
-                neighbor = (current[0] + direction[0], current[1] + direction[1], current[2]+direction[2])
+                nx = (current[0] + direction[0])  
+                if nx <0 or nx >= self.w :
+                    continue
+
+                ny = (current[1] + direction[1])  
+                if ny <0 or ny >= self.h :
+                    continue
+
+                nz = (current[2] + direction[2])
+                if nz <0 or nz >= self.l :
+                    continue
+                
+                neighbor = (nx, ny, nz)
+                neighbors.append(neighbor)
+            
+            #init map
+            for neighbor in neighbors:
                 #Field calculate
               
                 # 检查邻居是否在网格内且未被访问且不是障碍
@@ -203,8 +220,7 @@ class Grid3D:
                     sExist = self.smrMap[neighbor]
                     if neighbor not in startPoints:   
                         queue.append(neighbor)
-                        # smrVal = self.smrMap[current] + 1
-                        smrVal = self.smrMap[current] -  self.delta
+                        smrVal = self.smrMap[current] -  self.delta - neighbor[2]*5
                         if(smrVal < 0):
                             smrVal = 0
                     else:
