@@ -169,17 +169,39 @@ class Grid3D:
         polygons = self.getPolyShape(points, lyr, width)
         return polygons
   
-    def calSmrWithBFS(self, polygons):
+    def calSmrWithBFS(self, polygons, centerLine= False):
         print("size:", (self.w, self.h, self.l))
         # init template as maximum
         startPoints = []
-        for polygon in polygons:
-            tPoints = self._rasterization(polygon)
-            for (x,y,z) in tPoints:
-                self.smrMap[x,y,z] = self.s0
-            startPoints.extend(tPoints)
+        if(centerLine == True):
+            for i in  range(len(polygons)-1):
+                start = polygons[i]
+                end   = polygons[i+1]
+                if(start[0] == end[0] and start[1] != end[1]):
+                    s = min(start[1], end[1])
+                    m = max(start[1], end[1])
+                    yLst = [y  for y in range(s, m+1, 1)]
+                    for y in yLst:
+                        startPoints.append((start[0], y, start[2]))
+                elif(start[1] == end[1] and start[0] != end[0]):
+                    s = min(start[0], end[0])
+                    m = max(start[0], end[0])
+                    xLst = [x  for x in range(s, m+1, 1)]
+                    for x in xLst:
+                        startPoints.append((x, start[1], start[2]))
+                else:
+                    print("Not support for angle segment")
+                    return
+        else:
+            for polygon in polygons:
+                tPoints = self._rasterization(polygon)
+                startPoints.extend(tPoints)
+
+
+        # unique
+        print("startPoints:", startPoints)        
         startPoints = set(startPoints)
-      
+        
         #visited sets
         visited = set()  # 记录访问过的节点
         directions = [(-1, 0, 0), (1, 0,0), (0, -1,0), (0, 1,0), (0, 0, -1), (0, 0,1)]
@@ -188,6 +210,7 @@ class Grid3D:
         queue = deque()  # 使用队列存储待访问的节点
         for pt in startPoints:
             queue.append(pt)
+            self.smrMap[pt] = self.s0
         while queue:
             current = queue.popleft()
  

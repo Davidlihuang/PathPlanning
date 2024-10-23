@@ -101,8 +101,8 @@ class Plotting:
             #
             # length = 15
 
-            # if count % length == 0:
-            #     plt.pause(0.001)
+            if count % length == 0:
+                plt.pause(0.001)
         plt.pause(0.01)
 
     def plot_path(self, path, cl='r', flag=False):
