@@ -174,7 +174,7 @@ class AStar:
         return list(path)
 
     
-def runTemplate(centerPts, obstacles, s_start, s_goal):
+def runTemplate(centerPts, obstacles, s_start, s_goal, showAnimal= False):
     #initialized the  routing graph
     w, h, l,r = 50, 50, 3,1
     rtGraph = routingGraph.Grid3D(w, h, l, r)
@@ -200,13 +200,39 @@ def runTemplate(centerPts, obstacles, s_start, s_goal):
     # plt.show()
 
     """AStar"""
-    astar         = AStar(rtGraph, s_start, s_goal, "manhattan")
+    iter  = 20
     plot          = plotting.Plotting(rtGraph, s_start, s_goal)
-    path, visited = astar.searching()
-    plot.animation(path, visited, "A*", enable=True)  # animation
-    path          = rtGraph.simplePointSet(path)
-    print("Path:", path)
+    bestPathPoints = []
+    bestVisited    = [] 
+    bestPath       = []
+    oldSmr        = 0.0
+    newSmr        = 0.0
+    vCnd          = 1.0
+    # while(iter>0  and vCnd > 1e-3):
+    while(iter>0):
+        iter -= 1
+        astar         = AStar(rtGraph, s_start, s_goal, "manhattan")
+        pathPoints, visited = astar.searching()
+        path     = rtGraph.simplePointSet(pathPoints)
+        newSmr   = rtGraph.calculateMatchValue(centerPts[0], path)
+        disMatch = rtGraph.getDisMatchSegmentRange(centerPts[0], path)
+        rtGraph.updateSmrForDisMatchSeg(disMatch, 0.2)
+        
+        # ignore worst result ignore it, new smr value must bigger than old smr
+        if(newSmr < oldSmr and iter>0 ):
+            continue
 
+        #update smr map
+        bestPathPoints = pathPoints
+        bestVisited    = visited
+        bestPath       = path
+        
+        oldSmr = newSmr
+        vCnd = newSmr - oldSmr 
+        print("smr: {}%\nPath:{}".format(newSmr*100, path))
+
+    print("smr: {}%\nPath:{}".format(newSmr*100, bestPath))
+    plot.animation(bestPathPoints, bestVisited, "Best result", enable=showAnimal)  # animation
           
 if __name__ == '__main__':
 
@@ -237,10 +263,10 @@ if __name__ == '__main__':
     #O shape
     s_start = (20, 20, 0)
     s_goal  = (22, 20, 0)
-    tpZ     = [(20,20), (10, 20), (10, 5), (30, 5), (30, 20), (22, 20)]
+    tpZ     = [(20,20,0), (10, 20,0), (10, 5,0), (30, 5,0), (30, 20,0), (22, 20,0)]
     ob      = [[20, 3,0], [22, 3,0], [22, 10,0], [20, 10,0]]
     ob1     = [[27, 10,0], [33, 10,0], [33, 15,0], [27, 15,0]]
-    # runTemplate([tpZ], [ob, ob1], s_start, s_goal)
+    runTemplate([tpZ], [ob, ob1], s_start, s_goal)
 
     #cross talk
     s_start = (4, 15, 0)
@@ -249,4 +275,4 @@ if __name__ == '__main__':
     tpZ1    = [(4,10, 0),(25,10, 0),(25,27, 0), (45,27, 0)]
     # tpZ1    = [(0,10, 0),(25,10, 0),(25,27, 0), (49,27, 0)]
     ob      = [(20, 15, 0), (30, 15,0), (30, 20,0), (20, 20,0)]
-    runTemplate([tpZ, tpZ1], [], s_start, s_goal)
+    # runTemplate([tpZ, tpZ1], [], s_start, s_goal)

@@ -168,7 +168,31 @@ class Grid3D:
     def setNetTemplate(self, points, lyr, width):
         polygons = self.getPolyShape(points, lyr, width)
         return polygons
-  
+    def updateSmrForDisMatchSeg(self, misSegPts, penalty):
+        penaltyPts = []
+        for i in range(len(misSegPts)-1):
+            start = misSegPts[i]
+            end   = misSegPts[i+1]
+            if(start[0] == end[0] and start[1] != end[1]):
+                s = min(start[1], end[1])
+                m = max(start[1], end[1])
+                yLst = [y  for y in range(s, m+1, 1)]
+                for y in yLst:
+                    penaltyPts.append((start[0], y, start[2]))
+            elif(start[1] == end[1] and start[0] != end[0]):
+                s = min(start[0], end[0])
+                m = max(start[0], end[0])
+                xLst = [x  for x in range(s, m+1, 1)]
+                for x in xLst:
+                    penaltyPts.append((x, start[1], start[2]))
+            else:
+                print("Not support for angle segment")
+                return 
+        
+        penaltyPts = set(penaltyPts)
+        for pt in penaltyPts:
+            self.smrMap[pt] = max((self.smrMap[pt] - penalty), 0)
+                     
     def calSmrWithBFS(self, polygons, centerLine= False):
         print("size:", (self.w, self.h, self.l))
         # init template as maximum
@@ -288,6 +312,75 @@ class Grid3D:
         y2 = end[1]   + int(distance * perpY)
         return [(int(x1), int(y1)), (int(x2), int(y2))]
     
+    # get dis-match segments
+    def getUnitDirectionVector(self, startPt, endPt):
+        """
+        #get unit vector
+        start: (x, y, z)
+        end  : (x, y, z)
+        """
+        norm    = math.sqrt((endPt[0]-startPt[0])**2 + (endPt[1]-startPt[1])**2 + (endPt[2]-startPt[2])**2)
+        unitVec = ((endPt[0]-startPt[0])/norm, (endPt[1]-startPt[1])/norm, (endPt[2]-startPt[2])/norm)
+        return unitVec
+    def getDisMatchSegmentRange(self, tpCtrLine, resCtrLine):
+        # transform to unit vector
+        uTpVec = []
+        for i in range(len(tpCtrLine)-1):
+            startPt = tpCtrLine[i]
+            endPt   = tpCtrLine[i+1]
+            unitVec = self.getUnitDirectionVector(startPt, endPt)
+            uTpVec.append(unitVec)
+        uRsVec = []
+        for i in range(len(resCtrLine)-1):
+            startPt = resCtrLine[i]
+            endPt   = resCtrLine[i+1]
+            unitVec = self.getUnitDirectionVector(startPt, endPt)
+            uRsVec.append(unitVec)
+        print("tp unit vector:", uTpVec)
+        print("res unit vector:", uRsVec)
+        
+        # match by both size: resCtrLine start point the same as tpCtrLine
+        misStart = int(-1)
+        misEnd   = int(-1)
+        # 1: find the first un-match segment index
+        for i in range(len(uRsVec)):
+            if not (i < len(uTpVec)):
+                misStart = i
+                break
+            if(uTpVec[i] == uRsVec[i]):
+                continue
+            else:
+                misStart= i
+                break
+
+        # 2
+        uTpVec_reverse = uTpVec[::-1]
+        uRsVec_reverse = uRsVec[::-1]
+        for i in range(len(uRsVec_reverse)):
+            if not (i < len(uTpVec_reverse)):
+                misEnd = len(uRsVec_reverse)- i
+                break
+            
+            if(uRsVec_reverse[i] == uTpVec_reverse[i]):
+                continue
+            else:
+                misEnd= len(uRsVec_reverse)- i
+                break
+        print("missStar:{}, missEnd:{}".format(misStart, misEnd))
+
+        segPts = []
+        if(misStart == -1 and misEnd == -1):
+            return segPts
+        
+        for i in range(misStart, misEnd+1):
+            segPts.append(resCtrLine[i])
+        
+        return segPts
+    def calculateMatchValue(self, tpCtrLine, resCtrLine):
+        segPts = self.getDisMatchSegmentRange(tpCtrLine, resCtrLine)        
+        v = (len(resCtrLine) - len(segPts))/len(resCtrLine)
+        return v
+
     #center line [(1,1), (10, 1), (10, 10)]
     def getPolyShape(self, centerLine, lyr, width):
         print("centerLine: ", len(centerLine))
