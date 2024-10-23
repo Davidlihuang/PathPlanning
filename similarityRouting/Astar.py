@@ -30,6 +30,7 @@ class AStar:
         self.heuristic_type = heuristic_type
         self.rtGraph  = rtGraph
         self.detourCost = 2
+        self.viaCost    = 50
         self.OPEN = []  # priority queue / OPEN set
         self.CLOSED = []  # CLOSED set / VISITED order
         self.PARENT = dict()  # recorded parent
@@ -37,7 +38,7 @@ class AStar:
         self.smrWeight  = 3
         self.cstWeight  = 1
     def isOccupied(self, pt):
-        print("pt", pt)
+        # print("pt", pt)
         return self.rtGraph.is_occupied(pt)
     def searching(self):
         """
@@ -64,6 +65,8 @@ class AStar:
                 new_cost = self.g[s] + self.cost(s, s_n)
                 if(False == self.rtGraph.isStraitLine(self.PARENT[s], s, s_n)):
                     new_cost += self.detourCost
+                if(s[2]!= s_n[2]):
+                    new_cost += self.viaCost
                 
                 if s_n not in self.g:
                     self.g[s_n] = math.inf
@@ -196,11 +199,11 @@ def runTemplate(centerPts, obstacles, s_start, s_goal, showAnimal= False):
     obstacles.extend(path_obs_o)
     obstacles.extend(path_obs)
     rtGraph.set_obstacle(obstacles)  
-    rtGraph.drawShapelyPolygon(obstacles, w, h)
+    rtGraph.drawShapelyPolygon(obstacles, w, h, "black")
     # plt.show()
 
     """AStar"""
-    iter  = 20
+    iter  = 50
     plot          = plotting.Plotting(rtGraph, s_start, s_goal)
     bestPathPoints = []
     bestVisited    = [] 
@@ -211,27 +214,28 @@ def runTemplate(centerPts, obstacles, s_start, s_goal, showAnimal= False):
     # while(iter>0  and vCnd > 1e-3):
     while(iter>0):
         iter -= 1
+        # print(iter)
         astar         = AStar(rtGraph, s_start, s_goal, "manhattan")
         pathPoints, visited = astar.searching()
         path     = rtGraph.simplePointSet(pathPoints)
         newSmr   = rtGraph.calculateMatchValue(centerPts[0], path)
         disMatch = rtGraph.getDisMatchSegmentRange(centerPts[0], path)
-        rtGraph.updateSmrForDisMatchSeg(disMatch, 0.2)
+        rtGraph.updateSmrForDisMatchSeg(disMatch, 1)
         
         # ignore worst result ignore it, new smr value must bigger than old smr
-        if(newSmr < oldSmr and iter>0 ):
+        if(newSmr <= oldSmr):
             continue
 
         #update smr map
         bestPathPoints = pathPoints
         bestVisited    = visited
         bestPath       = path
-        
+        vCnd   = newSmr - oldSmr 
         oldSmr = newSmr
-        vCnd = newSmr - oldSmr 
-        print("smr: {}%\nPath:{}".format(newSmr*100, path))
+        print("smr: {}% vnd:{}\nPath:{}".format(newSmr*100, vCnd, path))
+        # plot.animation(bestPathPoints, bestVisited, "Best result", enable=False)
 
-    print("smr: {}%\nPath:{}".format(newSmr*100, bestPath))
+    print("smr: {}%\nPath:{}".format(oldSmr*100, bestPath))
     plot.animation(bestPathPoints, bestVisited, "Best result", enable=showAnimal)  # animation
           
 if __name__ == '__main__':
@@ -257,7 +261,7 @@ if __name__ == '__main__':
     # ob      = [[20, 15,0], [27, 15,0], [27, 20,0], [20, 20,0]]
     ob1      = [[37, 15,0], [41, 15,0], [41, 20,0], [37, 20,0]]
     # ob2      = [[37, 15,0], [46, 15,0], [46, 20,0], [37, 20,0]]
-    # runTemplate([tpZ], [ob1], s_start, s_goal)
+    # runTemplate([tpZ], [ob1], s_start, s_goal, True)
 
 
     #O shape
@@ -266,7 +270,7 @@ if __name__ == '__main__':
     tpZ     = [(20,20,0), (10, 20,0), (10, 5,0), (30, 5,0), (30, 20,0), (22, 20,0)]
     ob      = [[20, 3,0], [22, 3,0], [22, 10,0], [20, 10,0]]
     ob1     = [[27, 10,0], [33, 10,0], [33, 15,0], [27, 15,0]]
-    runTemplate([tpZ], [ob, ob1], s_start, s_goal)
+    # runTemplate([tpZ], [], s_start, s_goal, True)
 
     #cross talk
     s_start = (4, 15, 0)
@@ -275,4 +279,4 @@ if __name__ == '__main__':
     tpZ1    = [(4,10, 0),(25,10, 0),(25,27, 0), (45,27, 0)]
     # tpZ1    = [(0,10, 0),(25,10, 0),(25,27, 0), (49,27, 0)]
     ob      = [(20, 15, 0), (30, 15,0), (30, 20,0), (20, 20,0)]
-    # runTemplate([tpZ, tpZ1], [], s_start, s_goal)
+    runTemplate([tpZ, tpZ1], [], s_start, s_goal, True)

@@ -223,7 +223,7 @@ class Grid3D:
 
 
         # unique
-        print("startPoints:", startPoints)        
+        # print("startPoints:", startPoints)        
         startPoints = set(startPoints)
         
         #visited sets
@@ -267,7 +267,7 @@ class Grid3D:
                     sExist = self.smrMap[neighbor]
                     if neighbor not in startPoints:   
                         queue.append(neighbor)
-                        smrVal = self.smrMap[current] -  self.delta - neighbor[2]*5
+                        smrVal = self.smrMap[current] -  self.delta - neighbor[2]*self.s0*0.7
                         if(smrVal < 0):
                             smrVal = 0
                     else:
@@ -278,19 +278,20 @@ class Grid3D:
                     visited.add(neighbor)
                     self.smrMap[neighbor] = smrVal #max(sExist, smrVal)
  
-    def drawShapelyPolygon(self,polygons, w, h):
+    def drawShapelyPolygon(self,polygons, w, h, cr = ""):
         fig, ax = plt.subplots(figsize=(w, h)) 
         ax.set_xlim(0, w + 0.1)
         ax.set_ylim(0, h + 0.1)
-        """Draw polygon:[(x,y,z), (x1, y1, z1)]"""
         ax.set_aspect('equal')
         ax.set_title('Polygon Visualization')
         for polygon in polygons:
             pts = []
+            lyr = polygon[0][2]
             for (x,y, z) in polygon:
                 pts.append([x,y])
-            
-            p = MatplotlibPolygon(xy=pts, closed=True, fill=True, facecolor=colors[z], edgecolor=colors[z], linewidth=2)
+            if cr == "":
+                cr = colors[lyr]
+            p = MatplotlibPolygon(xy=pts, closed=True, fill=True, facecolor=cr, edgecolor=cr, linewidth=2)
             ax.add_patch(p)
         # plt.show()
     
@@ -336,8 +337,10 @@ class Grid3D:
             endPt   = resCtrLine[i+1]
             unitVec = self.getUnitDirectionVector(startPt, endPt)
             uRsVec.append(unitVec)
-        print("tp unit vector:", uTpVec)
-        print("res unit vector:", uRsVec)
+        # print(">>tp unit vector:", uTpVec)
+        # print(">>tp tpCtrLine:", tpCtrLine)
+        # print("<<res unit vector:", uRsVec)
+        # print("<<res resCtrLine:", resCtrLine)
         
         # match by both size: resCtrLine start point the same as tpCtrLine
         misStart = int(-1)
@@ -366,15 +369,19 @@ class Grid3D:
             else:
                 misEnd= len(uRsVec_reverse)- i
                 break
-        print("missStar:{}, missEnd:{}".format(misStart, misEnd))
+        # print("missStar:{}, missEnd:{}".format(misStart, misEnd))
 
         segPts = []
         if(misStart == -1 and misEnd == -1):
             return segPts
-        
-        for i in range(misStart, misEnd+1):
-            segPts.append(resCtrLine[i])
-        
+        else:
+            if(misStart > misEnd):
+                misStart, misEnd = misEnd, misStart
+            elif (misStart ==misEnd):
+                misEnd = min(misEnd + 1 , len(uRsVec_reverse)-1)
+            for i in range(misStart, misEnd+1):
+                segPts.append(resCtrLine[i])
+        # print("segPts: ", segPts)
         return segPts
     def calculateMatchValue(self, tpCtrLine, resCtrLine):
         segPts = self.getDisMatchSegmentRange(tpCtrLine, resCtrLine)        
@@ -383,7 +390,7 @@ class Grid3D:
 
     #center line [(1,1), (10, 1), (10, 10)]
     def getPolyShape(self, centerLine, lyr, width):
-        print("centerLine: ", len(centerLine))
+        # print("centerLine: ", len(centerLine))
         polygons = []
         for  i in range(len(centerLine)-1):
             first =  centerLine[i]  
