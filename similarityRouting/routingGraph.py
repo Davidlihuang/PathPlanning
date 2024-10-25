@@ -23,6 +23,13 @@ class Grid3D:
         self.delta = 1
         self.grid   = np.zeros((w, h, l), dtype=bool)  # 用于存储占用状态
         self.smrMap = np.zeros((w, h, l), dtype=float)  # save similarity map
+
+    def isValid(self, point):
+        if (0 <= point[0] < self.w and 0 <= point[1] < self.h and 0 <= point[2] < self.l):
+            return True
+        else:
+            return False
+    
     def _rasterization(self,  polygon):
         points=[]
         X = [ item[0] for item in polygon]
