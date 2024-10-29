@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.path import Path
 from matplotlib.patches import Polygon as MatplotlibPolygon
 from shapely.geometry import LineString
-from shapely.geometry.polygon import Polygon
+from shapely.geometry import Point as sPoint
 from collections import deque
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -40,6 +40,12 @@ class Point:
         self.x = x
         self.y = y
         self.z = z
+    def __eq__(self, other):
+        if not isinstance(other, Point):
+            return False
+        return (self.x == other.x) and (self.y == other.y) and (self.z == other.z)
+    def __hash__(self):
+        return hash((self.x, self.y, self.z))
 
 class Line: 
     def __init__(self, st:Point, ed:Point):
@@ -47,8 +53,8 @@ class Line:
         self.origin:Point                 #current line origin point
         self.start:Point   = st           #start point
         self.end:Point     = ed           #end   point
-        self.parent:dict   = dict()       #{Line:Line}
-        self.pointSet      = [[],[],[]]   #[[x:Point], [y:Point], [z:Point]] 
+        self.parent:Line   = None         #{Line:Line}
+        self.pointSet      = []
         self.axisDirect:AxisEnum     = AxisEnum.AXIS_OTHER
         self.lineDirect:TopologyEnum = TopologyEnum.ANY
     def setId(self, id):
@@ -60,7 +66,7 @@ class Line:
     def setEnd(self, pt:Point):
         self.end = pt    
     def setParent(self, line):
-        self.parent[line] = line
+        self.parent  = line
     def setAxisType(self, axis:AxisEnum):
         self.axisDirect = axis
     def setLineDirect(self, topo: TopologyEnum):
@@ -68,9 +74,39 @@ class Line:
     def setAxisPoints(self, points:list, axis: AxisEnum):
         for p in points:
             self.addPoint(p, axis)
-    def addPoint(self, pt: Point, axis: AxisEnum):
-        self.pointSet[axis.value].append(pt)        
-
+    def addPoint(self, pt: Point):     
+        self.pointSet.append(pt)     
+    def getLength(self, manhattan=True):
+        len = 0.0
+        if (manhattan):
+            len = abs(self.end.x - self.start.x) + abs(self.end.y - self.end.y) + abs(self.end.z - self.end.z)
+        else:
+            len =  math.sqrt( (self.end.x - self.start.x)**2 + (self.end.y - self.end.y)**2 + (self.end.z - self.end.z)**2 )
+        return len
+    def traceBack(self):
+        pts = []
+        parent = self
+        while (parent != None): 
+            pts.append(parent.origin)
+            parent = parent.parent
+        return pts
+            
+    def getIntersectionPoint(self, line):
+        tmpLine = LineString([(self.start.x, self.start.y, self.start.z), (self.end.x, self.end.y, self.end.z)])
+        spLine  = LineString([(line.start.x, line.start.y, line.start.z), (line.end.x, line.end.y, line.end.z)])
+        pt = spLine.intersection(tmpLine) 
+        if not isinstance(pt, sPoint): 
+            return None 
+        resPt = Point(pt.x, pt.y, pt.z)
+        return resPt
+        
+    def draw(self,  cr='', lw=1, lsty='-', ):
+        crList = ['red', 'blue', 'green', 'yellow','gold']
+        if cr =='':
+            cr = crList[int(self.start.z)]
+        plt.plot([self.start.x, self.end.x],[self.start.y, self.end.y],  linestyle=lsty, linewidth=lw, color=cr)
+        for pt in self.pointSet:
+            plt.plot(pt.x, pt.y, 'o', markersize=lw+0.5, color='Gray')
 class LineContainer:
     def __init__(self):
         self.lines                = [[],[],[]]     #[[x:Line], [y:Line], [z:Line]] 
@@ -93,10 +129,24 @@ class LineContainer:
                 curLine = self.lineDict[sid]
                 tmpLine = LineString([(curLine.start.x, curLine.start.y, curLine.start.z), (curLine.end.x, curLine.end.y, curLine.end.z)])
                 spLine  = LineString([(line.start.x, line.start.y, line.start.z), (line.end.x, line.end.y, line.end.z)])
-                if spLine.intersection(tmpLine) or spLine.equals(tmpLine):
+                if spLine.intersection(tmpLine):
                     itsList.append(curLine)
         return itsList
-    
+    def queryEqual(self, line:Line):
+        itsList = []
+        minPoint = Point(min(line.start.x, line.end.x), min(line.start.y, line.end.y), min(line.start.z, line.end.z))
+        maxPoint = Point(max(line.start.x, line.end.x), max(line.start.y, line.end.y), max(line.start.z, line.end.z))
+
+        #@todo
+        for item in self.container:
+            intersecting_segments = item.intersection((minPoint.x, minPoint.y, maxPoint.x, maxPoint.y))
+            for sid in intersecting_segments:
+                curLine = self.lineDict[sid]
+                tmpLine = LineString([(curLine.start.x, curLine.start.y, curLine.start.z), (curLine.end.x, curLine.end.y, curLine.end.z)])
+                spLine  = LineString([(line.start.x, line.start.y, line.start.z), (line.end.x, line.end.y, line.end.z)])
+                if spLine.equals(tmpLine):
+                    itsList.append(curLine)
+        return itsList
     def getLines(self, axis: AxisEnum):
         if (axis == AxisEnum.AXIS_X):
             return self.lines[0]
@@ -107,9 +157,9 @@ class LineContainer:
         else:
             return []
         
-    def setLines(self, lines, axis:AxisEnum):
+    def setLines(self, lines:list):
         for line in lines:
-            self.addLine(line, axis)
+            self.addLine(line, line.axisDirect)
 
     def addLine(self, line:Line, axis: AxisEnum):
         if(axis.value < AxisEnum.AXIS_X.value or axis.value > AxisEnum.AXIS_Z.value):
@@ -124,23 +174,74 @@ class LineContainer:
         maxPoint = Point(max(line.start.x, line.end.x), max(line.start.y, line.end.y), max(line.start.z, line.end.z))
         self.container[axis.value].insert(int(line.id), (minPoint.x, minPoint.y, maxPoint.x, maxPoint.y), obj=line)
 
-        
+class Path:
+    def __init__(self):
+        self.segs = []
+        self.vias = []
+        self.shapes = []
+    def addSeg(self, seg:Line):
+        self.segs.append(seg)
+    def getLength(self):
+        tLen = 0.0
+        for seg in self.segs:
+            tLen += seg.getLength()
+        return tLen
+    def draw(self, cr='', width = 6):
+        for seg in self.segs:
+            seg.draw(cr, width)                    
 class MikamiTauchi:
     """AStar set the cost + heuristics as the priority
     """
     def __init__(self, rtGraph:Grid3D):
-        self.rtGraph:Grid3D   = rtGraph
-        self.PARENT:dict    = dict()
-        self.allLines:dict  = dict()
+        self.rtGraph:Grid3D    = rtGraph
+        self.allPointsDT:dict    = dict()   #store(state[0,0,0]) : x, y, z 0:1 
+        self.allLines:dict     = dict()
         self.startSet:LineContainer  = LineContainer()
         self.targetSet:LineContainer = LineContainer()
         self.smrWeight      = 3
         self.cstWeight      = 1
+        self.enMultiLyr     = False
     def _isValid(self, pt:Point):
         return self.rtGraph.isValid((pt.x, pt.y, pt.z))
     def _isOccupied(self, pt:Point):
         return self.rtGraph.is_occupied((pt.x, pt.y, pt.z))
+
+    def getPath(self, line1:Line, line2:Line)->Path:
+        path = Path()
+        pts  = line1.traceBack()
+        pts2 = line2.traceBack()
+        pts = pts[::-1]
+        itp = line1.getIntersectionPoint(line2)
+        if(itp != None):
+            pts.append(itp)
+        pts.extend(pts2)
+        for i in range(len(pts)-1):
+            start = pts[i]
+            end   = pts[i+1]
+            ln  = Line(start, end)
+            path.addSeg(ln)
+        return  path
+    def calIntersection(self, lineSet:list, targetContainer:LineContainer)->Path:
+        bestPath:Path = None
+        bestLen  = math.inf
+        for line1 in lineSet:
+            lines = targetContainer.queryIntersect(line1)
+            if(len(lines) == 0):
+                continue
+            else:
+                for ll in lines:
+                    path = self.getPath(line1, ll)
+                    wireLen = path.getLength()
+                    if(wireLen < bestLen):
+                        bestLen = wireLen
+                        bestPath = path
+                        path.draw()
+        return bestPath
     def findPath(self, s, e):
+        #tmp
+        visitSource = []
+        visitTarget = []
+
         start = Point(s[0], s[1], s[2])
         goal  = Point(e[0], e[1], e[2])
         # invalid
@@ -152,25 +253,63 @@ class MikamiTauchi:
             return []
         
         #create s/t line
-        _, lineX_s = self.createLine(start, AxisEnum.AXIS_X)
-        self.startSet.addLine(lineX_s,   AxisEnum.AXIS_X)
-        _, lineY_s = self.createLine(start, AxisEnum.AXIS_Y)
-        self.startSet.addLine(lineY_s,   AxisEnum.AXIS_Y)
-        _, lineZ_s = self.createLine(start, AxisEnum.AXIS_Z)
-        self.startSet.addLine(lineZ_s,   AxisEnum.AXIS_Z)
-
-        _, lineX_t = self.createLine(goal, AxisEnum.AXIS_X)
-        self.targetSet.addLine(lineX_t, AxisEnum.AXIS_X)
-        _, lineY_t = self.createLine(goal, AxisEnum.AXIS_Y)
-        self.targetSet.addLine(lineY_t, AxisEnum.AXIS_Y)
-        _, lineZ_t = self.createLine(goal, AxisEnum.AXIS_Z)
-        self.targetSet.addLine(lineZ_t, AxisEnum.AXIS_Z)
+        startLines     =  self.createLineAll(start)
+        self.startSet.setLines(startLines)
+        for l in startLines:
+            l.draw('red')
+        goalLines   = self.createLineAll(goal)
+        self.targetSet.setLines(goalLines)
+        for l in goalLines:
+            l.draw('green') 
         
-        lines = self.targetSet.queryIntersect(lineX_t)
-        print(lines)
-    
+        path =  self.calIntersection(startLines, self.targetSet)
+        while len(startLines) !=0 and len(goalLines)!=0 and path ==None:
+            #expand S
+            expandList = []
+            for subLine in startLines:
+                e = self.expandLine(subLine, self.startSet)
+                expandList.extend(e)
+            self.startSet.setLines(expandList)
+            visitSource.append(expandList)   
+            path  = self.calIntersection(expandList, self.targetSet)
+            if (path != None):
+                print("Find path success from source !")
+                break
+            startLines =   expandList
+
+            #expand T
+            expandListT = []
+            for subLine in goalLines:
+                e = self.expandLine(subLine, self.targetSet)
+                expandListT.extend(e) 
+            self.targetSet.setLines(expandListT)
+            visitTarget.append(expandListT)
+            path  = self.calIntersection(expandListT, self.startSet)
+            if (path != None):
+                print("Find path success from target !")
+                break
+            goalLines = expandListT
+        
+        self.showAlgoResult(visitSource, visitTarget, path)
+        plt.show()
+        
+
     def findPathWithTemplate(self, start:Point, goal:Point, tp:list):
         pass
+    
+    def createLineAll(self, coord: Point):
+        lines = []
+        _,l1 = self.createLine(coord, AxisEnum.AXIS_X)
+        _,l2 = self.createLine(coord, AxisEnum.AXIS_Y)
+        
+        lines.append(l1)
+        lines.append(l2)
+
+        if self.enMultiLyr ==True:
+            _,l3 = self.createLine(coord, AxisEnum.AXIS_Z)
+            lines.append(l3)
+
+        return lines
 
     def createLine(self, coord: Point, axis:AxisEnum, tpDir:TopologyEnum=TopologyEnum.ANY):
         line = Line(coord, coord)
@@ -178,9 +317,10 @@ class MikamiTauchi:
             return (False, line)
         
         line.setOrigin(coord)
+        line.addPoint(coord)
         line.setAxisType(axis)
         line.setLineDirect(tpDir)
- 
+        line.setParent(None)
         if(AxisEnum.AXIS_X == axis):
             points = set()
             for x in range(coord.x, self.rtGraph.w):
@@ -201,8 +341,7 @@ class MikamiTauchi:
             line.setStart(Point(small, coord.y, coord.z))
             line.setEnd(Point(bigger, coord.y, coord.z))
             for pt in points_list:
-                line.addPoint(pt, axis)
-            
+                line.addPoint(pt) 
         elif AxisEnum.AXIS_Y == axis:
             points = set()
             for y in range(coord.y, self.rtGraph.h):
@@ -222,8 +361,8 @@ class MikamiTauchi:
             line.setStart(Point(coord.x, small, coord.z))
             line.setEnd(Point(coord.x, bigger, coord.z))
             for pt in points_list:
-                line.addPoint(pt, axis)
-        elif AxisEnum.AXIS_Z == axis:
+                line.addPoint(pt)
+        elif AxisEnum.AXIS_Z == axis and self.enMultiLyr == True:
             points = set()
             for z in range(coord.z, self.rtGraph.l):
                 tmpPoint = Point(coord.x, coord.y, z)
@@ -242,16 +381,116 @@ class MikamiTauchi:
             line.setStart(Point(coord.x, coord.y, small))
             line.setEnd(Point(coord.x, coord.y, bigger))
             for pt in points_list:
-                line.addPoint(pt, axis)
+                line.addPoint(pt)
         else:
-            pass
+            return (False, None)
 
         id = len(self.allLines)
         line.setId(id)
         self.allLines[id] = line
         return (True, line)
+                 
+    def expandLine(self, line:Line, lct:LineContainer, tpDir:TopologyEnum=TopologyEnum.ANY):
+        #record expanded points, if expand ignore
+        lines1  = []
+        lines2  = []
+        if (line.axisDirect == AxisEnum.AXIS_X):
+            for pt in line.pointSet:
+                if pt == line.origin:
+                    continue
+                
+                if(self.enMultiLyr == False): 
+                    if  False == (pt in self.allPointsDT and self.allPointsDT[pt][AxisEnum.AXIS_Y.value] == 1) :
+                        _,lineY = self.createLine(pt,AxisEnum.AXIS_Y, tpDir)
+                        lineY.setParent(line)
+                        lines1.append(lineY)
+                        for point in lineY.pointSet:
+                            state = [0,0,0]
+                            if point not in self.allPointsDT:
+                                state[lineY.axisDirect.value] =  1
+                                self.allPointsDT[point] = state
+                            else:
+                                self.allPointsDT[point][lineY.axisDirect.value] = 1
+                else:
+                    if  False == (pt in self.allPointsDT and self.allPointsDT[pt][AxisEnum.AXIS_Z.value] == 1) :
+                        _,lineZ = self.createLine(pt,AxisEnum.AXIS_Z, tpDir)
+                        lineZ.setParent(line)
+                        lines2.append(lineZ)
+                        for point in lineZ.pointSet:
+                            state = [0,0,0]
+                            if point not in self.allPointsDT:
+                                state[lineZ.axisDirect.value] =  1
+                                self.allPointsDT[point] = state
+                            else:
+                                self.allPointsDT[point][lineZ.axisDirect.value] = 1  
+        elif (line.axisDirect == AxisEnum.AXIS_Y):
+            for pt in line.pointSet:
+                if pt == line.origin:
+                    continue
+                
+                if(self.enMultiLyr == False):
+                    if  False == (pt in self.allPointsDT and self.allPointsDT[pt][AxisEnum.AXIS_X.value] == 1) :
+                        _,lineX = self.createLine(pt,AxisEnum.AXIS_X, tpDir)
+                        lineX.setParent(line)
+                        lines1.append(lineX)
+                        for point in lineX.pointSet:
+                            state = [0,0,0]
+                            if point not in self.allPointsDT:
+                                state[lineX.axisDirect.value] =  1
+                                self.allPointsDT[point] = state
+                            else:
+                                self.allPointsDT[point][lineX.axisDirect.value] = 1
+                else:
+                    if  False == (pt in self.allPointsDT and self.allPointsDT[pt][AxisEnum.AXIS_Z.value] == 1) :
+                        _,lineZ = self.createLine(pt,AxisEnum.AXIS_Z, tpDir)
+                        lineZ.setParent(line)
+                        lines2.append(lineZ)
+                        for point in lineZ.pointSet:
+                            state = [0,0,0]
+                            if point not in self.allPointsDT:
+                                state[lineZ.axisDirect.value] =  1
+                                self.allPointsDT[point] = state
+                            else:
+                                self.allPointsDT[point][lineZ.axisDirect.value] = 1
+        elif (line.axisDirect == AxisEnum.AXIS_Z and self.enMultiLyr == True):
+            for pt in line.pointSet:
+                if pt == line.origin:
+                    continue
+                if  False == (pt in self.allPointsDT and self.allPointsDT[pt][AxisEnum.AXIS_X.value] == 1) :
+                    _,lineX = self.createLine(pt,AxisEnum.AXIS_X, tpDir)
+                    lineX.setParent(line)
+                    lines1.append(lineX)
+                    for point in lineX.pointSet:
+                            state = [0,0,0]
+                            if point not in self.allPointsDT:
+                                state[lineX.axisDirect.value] =  1
+                                self.allPointsDT[point] = state
+                            else:
+                                self.allPointsDT[point][lineX.axisDirect.value] = 1
+                if  False == (pt in self.allPointsDT and self.allPointsDT[pt][AxisEnum.AXIS_Y.value] == 1) :
+                    _,lineY = self.createLine(pt,AxisEnum.AXIS_Y, tpDir)
+                    lineY.setParent(line)
+                    lines2.append(lineY)
+                    for point in lineY.pointSet:
+                            state = [0,0,0]
+                            if point not in self.allPointsDT:
+                                state[lineY.axisDirect.value] =  1
+                                self.allPointsDT[point] = state
+                            else:
+                                self.allPointsDT[point][lineY.axisDirect.value] = 1    
+        else:
+            return []
+        lines1.extend(lines2)
+        return lines1
+    
+    def showAlgoResult(self, sourceList, targetList, path):
+        for lst in sourceList:
+            for l in lst:
+                l.draw('gray')
+        for lst in targetList:
+            for l in lst:
+                l.draw('gray')
         
-    def expandLine(self, line:Line, tpDir:TopologyEnum=TopologyEnum.ANY):
-        tmpLine = []
-
-        return tmpLine
+        if path != None:
+            path.draw()
+        

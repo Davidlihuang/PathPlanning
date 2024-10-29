@@ -25,7 +25,7 @@ def testMikamiTauchi(centerPts, obstacles, s_start, s_goal, showAnimal= False):
     rtGraph = routingGraph.Grid3D(w, h, l, r)
     
     #defined template
-    path   = rtGraph.setNetTemplate(centerPts[0], 0, 2)  #tempalte   Z
+    path         = rtGraph.setNetTemplate(centerPts[0], 0, 2)  #tempalte   Z
     path_obs_o   = rtGraph.setNetTemplate(centerPts[0], l-1, 2)  #tempalte   Z
     path_obs=[]
     if(len(centerPts) >1):
@@ -37,17 +37,20 @@ def testMikamiTauchi(centerPts, obstacles, s_start, s_goal, showAnimal= False):
     obstacles.extend(path_obs)
     rtGraph.set_obstacle(obstacles)  
     rtGraph.drawShapelyPolygon(obstacles, w, h, "black")
-    plt.show()
+    # plt.show()
 
     mkt = mikami.MikamiTauchi(rtGraph)
  
     mkt.findPath(s_start, s_goal)
 
 if __name__ == '__main__':
-    s_start = (4, 15, 0)
-    s_goal  = (40, 5, 0)
+    s_start = (20, 20, 0)
+    # s_goal  = (8, 15, 0)
+    # s_goal  = (35, 23, 0)
+    # s_goal  = (10, 5, 0)
+    s_goal  = (28, 15, 0)
     tpZ     = [(4,15, 0),(28,15, 0),(28,5, 0), (40,5, 0)]
-    tpZ1    = [(4,10, 0),(25,10, 0),(25,27, 0), (45,27, 0)]
+    tpZ1    = [(0,10, 0),(25,10, 0),(25,27, 0), (45,27, 0),(45,19,0),(25, 19, 0)]
     # tpZ1    = [(0,10, 0),(25,10, 0),(25,27, 0), (49,27, 0)]
-    ob      = [(20, 15, 0), (30, 15,0), (30, 20,0), (20, 20,0)]
+    # ob      = [(45,19, 0), (43,19, 0), (43,27, 0), (45,27, 0)]
     testMikamiTauchi([tpZ, tpZ1], [], s_start, s_goal, True)    

@@ -100,7 +100,6 @@ class Plotting:
                 length = 40
             #
             # length = 15
-
             if count % length == 0:
                 plt.pause(0.001)
         plt.pause(0.01)
