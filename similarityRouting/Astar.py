@@ -184,23 +184,25 @@ def runTemplate(centerPts, obstacles, s_start, s_goal, showAnimal= False):
     
     #defined template
     path   = rtGraph.setNetTemplate(centerPts[0], 0, 2)  #tempalte   Z
-    path_obs_o   = rtGraph.setNetTemplate(centerPts[0], l-1, 2)  #tempalte   Z
+    templateShow   = rtGraph.setNetTemplate(centerPts[0], l-1, 2)  #tempalte   Z
     path_obs=[]
     if(len(centerPts) >1):
-        path_obs     = rtGraph.setNetTemplate(centerPts[1], 0, 2)  #show z template obstacle
-        
+        for i in range(1, len(centerPts)):
+            path_obs     = rtGraph.setNetTemplate(centerPts[i], 0, 2)  #show z template obstacle
+            obstacles.extend(path_obs)
     
     #initialized similarity graph
-    # rtGraph.calSmrWithBFS(path)
     rtGraph.calSmrWithBFS(centerPts[0], True)
     rtGraph.drawSmrMap()
-
-    #Set obstacle and show
-    obstacles.extend(path_obs_o)
-    obstacles.extend(path_obs)
     rtGraph.set_obstacle(obstacles)  
-    rtGraph.drawShapelyPolygon(obstacles, w, h, "black")
-    # plt.show()
+
+    #show design
+    fig, ax = plt.subplots(figsize=(w, h)) 
+    ax.set_xlim(0, w + 0.1)
+    ax.set_ylim(0, h + 0.1)
+    rtGraph.drawShapelyPolygon(fig, ax, obstacles,  "black", 1)
+    rtGraph.drawShapelyPolygon(fig, ax, templateShow,  "yellow", 0.4)
+     
 
     """AStar"""
     iter  = 50
@@ -245,14 +247,14 @@ if __name__ == '__main__':
     s_goal  = (45, 27, 0)
     tpZ     = [(4,4,0),(25,4,0),(25,27,0), (45,27,0)]
     ob      = [(20, 15, 0), (30, 15,0), (30, 20,0), (20, 20,0)]
-    # runTemplate([tpZ], [ob], s_start, s_goal)
+    # runTemplate([tpZ], [ob], s_start, s_goal, False)
 
     # template U
     s_start = (5, 5, 0)
     s_goal  = (20, 5, 0)
     tpZ     = [(5,5, 0),(5,40, 0),(20,40, 0), (20, 5, 0)]
     ob      = [[20, 15,0], [30, 15,0], [30, 20,0], [20, 20,0]]
-    # runTemplate([tpZ], [ob], s_start, s_goal)
+    # runTemplate([tpZ], [ob], s_start, s_goal, False)
     
     # snake shape
     s_start = (30,10, 0)
@@ -261,7 +263,7 @@ if __name__ == '__main__':
     # ob      = [[20, 15,0], [27, 15,0], [27, 20,0], [20, 20,0]]
     ob1      = [[37, 15,0], [41, 15,0], [41, 20,0], [37, 20,0]]
     # ob2      = [[37, 15,0], [46, 15,0], [46, 20,0], [37, 20,0]]
-    # runTemplate([tpZ], [ob1], s_start, s_goal, True)
+    # runTemplate([tpZ], [ob1], s_start, s_goal, False)
 
 
     #O shape
@@ -270,7 +272,7 @@ if __name__ == '__main__':
     tpZ     = [(20,20,0), (10, 20,0), (10, 5,0), (30, 5,0), (30, 20,0), (22, 20,0)]
     ob      = [[20, 3,0], [22, 3,0], [22, 10,0], [20, 10,0]]
     ob1     = [[27, 10,0], [33, 10,0], [33, 15,0], [27, 15,0]]
-    # runTemplate([tpZ], [], s_start, s_goal, True)
+    # runTemplate([tpZ], [ob, ob1], s_start, s_goal, False)
 
     #cross talk
     s_start = (4, 15, 0)
@@ -279,4 +281,27 @@ if __name__ == '__main__':
     tpZ1    = [(4,10, 0),(25,10, 0),(25,27, 0), (45,27, 0)]
     # tpZ1    = [(0,10, 0),(25,10, 0),(25,27, 0), (49,27, 0)]
     ob      = [(20, 15, 0), (30, 15,0), (30, 20,0), (20, 20,0)]
-    runTemplate([tpZ, tpZ1], [], s_start, s_goal, True)
+    # runTemplate([tpZ, tpZ1], [], s_start, s_goal, False)
+
+    # ring 
+    s_start = (6, 24, 0)
+    s_goal  = (4, 24, 0)
+    tpZ     = [(6, 24, 0), (17,24,0), (17, 4, 0), (4, 4, 0),(4,24,0)]
+    tpZ1    = [(6,10,0),(10,10,0),(10,16,0),(6,16,0)]
+    tpZ2    = [(6,7,0), (14, 7, 0),(14, 20, 0), (6, 20,0)]
+    tpZ3    = [(10,10,0), (18, 10,0)]
+    ob      = [(20, 15, 0), (30, 15,0), (30, 20,0), (20, 20,0)]
+    # runTemplate([tpZ, tpZ1, tpZ2, tpZ3], [], s_start, s_goal, False)
+
+    #detour
+    s_start = (20, 30, 0)
+    s_goal  = (40, 25, 0)
+    tpZ1     = [(20,30, 0),(20,25, 0),(25,25, 0), (25,15, 0), (35,15, 0), (35,25, 0), (40,25, 0)]
+    tpZ2    = [(24,40, 0),(24,30, 0),(30, 30, 0), (30,20, 0)]
+    ob      = [(20, 15, 0), (30, 15,0), (30, 20,0), (20, 20,0)]
+    runTemplate([tpZ1, tpZ2], [], s_start, s_goal, False)
+
+    s_start = (10, 20, 0)
+    s_goal  = (35, 34, 0)
+    tp      = [(10, 20, 0),(29,20, 0),(29,34, 0), (35, 34, 0)]
+    runTemplate([tp, tpZ1, tpZ2], [], s_start, s_goal, False)

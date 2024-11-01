@@ -504,30 +504,35 @@ class MikamiTauchi:
     def dfs(self, traversed:list, curLine:Line,  start: Point, goal:Point, sTopoList:list, template:list, level):
         curTopoList = copy.deepcopy(sTopoList)  
         tp = TopologyEnum.ANY
-        print("curLevel:{0}, len(topList):{1}", level, len(curTopoList))
+        print("curLevel:{0}, len(topList):{1}".format(level, len(curTopoList)))
         if len(curTopoList) != 0:
             tp = curTopoList.pop(0)    
-        
+        print("currentTopo:{}".format(tp))
         if curLine not in traversed:
+            if self.path != None:
+                return
             #find Path
             path  = self.getSimilarityPath([curLine], template, self.targetSet)
             if path != None and len(curTopoList)==0:
                 self.path = path
                 print("find Path")
+                return 
             
-            if self.path != None:
+            if  len(curTopoList)==0:
+                return
+            if level > len(template):
                 return
             traversed.append(curLine)
 
             #expand
-            epdLines = self.expandLine(curLine, self.startSet, tp)
+            epdLines = self.expandLineWithTp(curLine, self.startSet, tp)
             segs = []
             for i in range(len(template)-1):
                 s = template[i]
                 t = template[i+1]
                 tmpLine = Line(Point(s[0], s[1], s[2]), Point(t[0], t[1], t[2]))
                 segs.append(tmpLine)
-            refPoint = goal
+            refPoint = segs[level+1].getCentroid()
             minDis      = math.inf
             for cdtLine in epdLines:
                 for tl in segs:
@@ -538,8 +543,8 @@ class MikamiTauchi:
                             minDis = dis
                             refPoint = tmpPt            
             epdLines  = sorted(epdLines, key= lambda line: self.__sortLambda(line, refPoint))
-
             level+=1
+ 
             # traverse
             for nextLine in epdLines:
                 self.dfs(traversed, nextLine, start, goal, curTopoList, template, level)
@@ -563,6 +568,7 @@ class MikamiTauchi:
         
         #topo proccess
         mirroTopo = self.__getMirrorTopo(topo)
+        print("Topo", topo)
         print("mirroTopo", mirroTopo)
 
         sTopoList = [TopologyEnum.ANY]

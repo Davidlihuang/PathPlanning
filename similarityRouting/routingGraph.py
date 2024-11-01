@@ -274,7 +274,7 @@ class Grid3D:
                     sExist = self.smrMap[neighbor]
                     if neighbor not in startPoints:   
                         queue.append(neighbor)
-                        smrVal = self.smrMap[current] -  self.delta - neighbor[2]*self.s0*0.7
+                        smrVal = self.smrMap[current] -  self.delta - neighbor[2]*self.s0*0.5
                         if(smrVal < 0):
                             smrVal = 0
                     else:
@@ -285,10 +285,8 @@ class Grid3D:
                     visited.add(neighbor)
                     self.smrMap[neighbor] = smrVal #max(sExist, smrVal)
  
-    def drawShapelyPolygon(self,polygons, w, h, cr = ""):
-        fig, ax = plt.subplots(figsize=(w, h)) 
-        ax.set_xlim(0, w + 0.1)
-        ax.set_ylim(0, h + 0.1)
+    def drawShapelyPolygon(self,fig, ax, polygons, cr = "", ap = 1, fl = True):
+        # fig, ax = plt.subplots(figsize=(w, h)) 
         ax.set_aspect('equal')
         ax.set_title('Polygon Visualization')
         for polygon in polygons:
@@ -298,7 +296,7 @@ class Grid3D:
                 pts.append([x,y])
             if cr == "":
                 cr = colors[lyr]
-            p = MatplotlibPolygon(xy=pts, closed=True, fill=True, facecolor=cr, edgecolor=cr, linewidth=2)
+            p = MatplotlibPolygon(xy=pts, closed=True, fill=fl, facecolor=cr,alpha=ap, edgecolor=cr, linewidth=2)
             ax.add_patch(p)
         # plt.show()
     
@@ -480,7 +478,8 @@ if __name__ == '__main__':
     grid.set_obstacle(obses)
 
     # draw shapely polygon
-    grid.drawShapelyPolygon(obses, w, h)
+    fig, ax = plt.subplots(figsize=(w, h)) 
+    grid.drawShapelyPolygon(fig, ax, obses, w, h)
     # grid.draw_grid()
     grid.drawSmrMap()
  

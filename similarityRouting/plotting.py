@@ -61,7 +61,7 @@ class Plotting:
         self.plot_visited_bi(v_fore, v_back)
         self.plot_path(path)
         plt.show()
-
+    
     def plot_grid(self, name):
         plt.plot(self.xI[0], self.xI[1], "bs")
         plt.plot(self.xG[0], self.xG[1], "gs")
