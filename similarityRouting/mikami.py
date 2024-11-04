@@ -249,12 +249,7 @@ class Path:
                         pts.append((seg1.end.x, seg1.end.y, seg1.end.z))
         return pts
 
-        
-        
-
-
-
-                   
+                         
 class MikamiTauchi:
     def __init__(self, rtGraph:Grid3D, enMultiLyr:bool = True):
         self.rtGraph:Grid3D    = rtGraph
@@ -287,7 +282,6 @@ class MikamiTauchi:
                 break
         centerPoint = coverLine.getCentroid()
         return self.__sortLambda(line, centerPoint)
-
     def __sortLambda(self, line:Line, pt:Point):
         if(line.axisDirect == AxisEnum.AXIS_X):
             return abs(pt.y - line.start.y)
@@ -474,8 +468,8 @@ class MikamiTauchi:
             #expand S
             expandList = []
             for subLine in startLines:
-                e = self.expandLine(subLine, self.startSet)
-                e = sorted(e, key= lambda line: self.__sortLambda(line, subLine.origin))
+                e = self.expandLineWithTp(subLine, self.startSet)
+                e = sorted(e, key= lambda line: self.__sortLambda(line, goal))
                 expandList.extend(e)
             self.startSet.setLines(expandList)
             visitSource.append(expandList)   
@@ -488,8 +482,8 @@ class MikamiTauchi:
             #expand T
             expandListT = []
             for subLine in goalLines:
-                e = self.expandLine(subLine, self.targetSet)
-                e = sorted(e, key= lambda line: self.__sortLambda(line, subLine.origin))
+                e = self.expandLineWithTp(subLine, self.targetSet)
+                e = sorted(e, key= lambda line: self.__sortLambda(line, goal))
                 expandListT.extend(e) 
             self.targetSet.setLines(expandListT)
             visitTarget.append(expandListT)
@@ -550,15 +544,15 @@ class MikamiTauchi:
                 self.dfs(traversed, nextLine, start, goal, curTopoList, template, level)
 
             
-    def findPathDfs2(self, s, e, template:list=[]):
-        #cal topology
+    def findPathWithTemplate(self, s, e, template:list=[]):
+        #calculate topology
         topo = self.__topologyExtract(template)
 
         #tmp
         start = Point(s[0], s[1], s[2])
         goal  = Point(e[0], e[1], e[2])
 
-        # invalid
+        # Invalid Judgement
         if self.rtGraph.is_occupied((start.x, start.y, start.z)):
             print("Start is occupied!")
             return []
@@ -582,7 +576,7 @@ class MikamiTauchi:
             tTopoList = mirroTopo[mid: len(topo)]
             tTopoList = tTopoList[::-1]
       
-        stmpList  = copy.deepcopy(template)
+        sTmpList  = copy.deepcopy(template)
         sTopoList = copy.deepcopy(topo)
         
   
@@ -600,216 +594,16 @@ class MikamiTauchi:
         
         #traverse
         traverseList = [ ]
-        self.dfs(traverseList, startLines[0], start, goal, sTopoList, stmpList, level)
-    
-            
-        self.showAlgoResult([traverseList], [[]], self.path)
-        plt.show()
+        self.dfs(traverseList, startLines[0], start, goal, sTopoList, sTmpList, level)
 
-    def findPathDfs(self, s, e, template:list=[]):
-        #cal topology
-        topo = self.__topologyExtract(template)
 
-        #tmp
-        visitSource = []
-        visitTarget = []
-        start = Point(s[0], s[1], s[2])
-        goal  = Point(e[0], e[1], e[2])
-
-        # invalid
-        if self.rtGraph.is_occupied((start.x, start.y, start.z)):
-            print("Start is occupied!")
-            return []
-        if self.rtGraph.is_occupied((goal.x, goal.y, goal.z)):
-            print("Target is occupied")
-            return []
-        
-        #topo proccess
-        mirroTopo = self.__getMirrorTopo(topo)
-        print("mirroTopo", mirroTopo)
-
-        sTopoList = [TopologyEnum.ANY]
-        tTopoList = [TopologyEnum.ANY]
-        if(len(topo) ==  1):
-            sTopoList = copy.deepcopy(topo)
-            tTopoList = copy.deepcopy(mirroTopo)
+        if self.path == None:
+            print("Find Path failed with template! start find without template!")
+            self.findPath(s,e)
         else:
-            mid = int(len(topo)/2)
-            sTopoList = topo[0:mid]
-            tTopoList = mirroTopo[mid: len(topo)]
-            tTopoList = tTopoList[::-1]
-      
-        stmpList  = copy.deepcopy(template)
-        sTopoList = copy.deepcopy(topo)
-        
-        traversed = [ ]
-        stack     = [ ]
-
-
-        #create s/t line
-        level = 0
-        startLines     =  self.createLineAll(start, sTopoList.pop(0))
-        self.startSet.setLines(startLines)
-        for l in startLines:
-            l.draw('red')
-        goalLines   = self.createLineAll(goal, tTopoList.pop(0))
-        self.targetSet.setLines(goalLines)
-        for l in goalLines:
-            l.draw('green') 
-        
-        #traverse
-        traversed.extend(startLines)
-        stack.extend(startLines)
-        while stack :
-            curLine = stack[-1]
-              
-            path  = self.getSimilarityPath([curLine], template, self.targetSet)
-            if path != None and len(sTopoList)==1:
-                print("find Path")
-                break
-            
-            if curLine not in traversed:
-                traversed.append(curLine)
-            pop = True
-
-            tp = TopologyEnum.ANY
-            if len(sTopoList) != 0:
-                tp = sTopoList.pop(0)
-            
-            #expand
-            epdLines = self.expandLine(curLine, self.startSet, tp)
-            segs = []
-            for i in range(len(template)-1):
-                s = template[i]
-                t = template[i+1]
-                tmpLine = Line(Point(s[0], s[1], s[2]), Point(t[0], t[1], t[2]))
-                segs.append(tmpLine)
-            
-            refPoint = goal
-            minDis      = math.inf
-            for cdtLine in epdLines:
-                for tl in segs:
-                    if cdtLine.isCover(tl):          
-                        tmpPt  = tl.getCentroid()
-                        dis = abs(tmpPt.z - start.z) + abs(tmpPt.y - start.y) + abs(tmpPt.x - start.x)
-                        if  dis < minDis:
-                            minDis = dis
-                            refPoint = tmpPt
-                            
-            epdLines    = sorted(epdLines, key= lambda line: self.__sortLambda(line, refPoint))
-            visitSource.append(epdLines)  
-            for adjacent in epdLines:
-                if adjacent not in traversed:
-                    stack.append(adjacent)
-                    pop = False
-                    break
-            if pop:
-                stack.pop()
-        
-        
-        self.showAlgoResult(visitSource, visitTarget, path)
-        plt.show()
-
-    def findPathWithTemplate(self, s, e, template:list=[]):
-        #cal topology
-        topo = self.__topologyExtract(template)
-
-        #tmp
-        visitSource = []
-        visitTarget = []
-        start = Point(s[0], s[1], s[2])
-        goal  = Point(e[0], e[1], e[2])
-
-        # invalid
-        if self.rtGraph.is_occupied((start.x, start.y, start.z)):
-            print("Start is occupied!")
-            return []
-        if self.rtGraph.is_occupied((goal.x, goal.y, goal.z)):
-            print("Target is occupied")
-            return []
-        
-        #topo proccess
-        mirroTopo = self.__getMirrorTopo(topo)
-        print("mirroTopo", mirroTopo)
-
-        sTopoList = [TopologyEnum.ANY]
-        tTopoList = [TopologyEnum.ANY]
-        if(len(topo) ==  1):
-            sTopoList = copy.deepcopy(topo)
-            tTopoList = copy.deepcopy(mirroTopo)
-        else:
-            mid = int(len(topo)/2)
-            sTopoList = topo[0:mid]
-            tTopoList = mirroTopo[mid: len(topo)]
-            tTopoList = tTopoList[::-1]
-      
-        
-        sTopoList = copy.deepcopy(topo)
-
-        #create s/t line
-        level = 0
-        startLines     =  self.createLineAll(start, sTopoList.pop(0))
-        self.startSet.setLines(startLines)
-        for l in startLines:
-            l.draw('red')
-        goalLines   = self.createLineAll(goal, tTopoList.pop(0))
-        self.targetSet.setLines(goalLines)
-        for l in goalLines:
-            l.draw('green') 
-        
-        path =  self.getSimilarityPath(startLines, template, self.targetSet)
-        while len(startLines) !=0 and len(goalLines)!=0 and level > 5:
-            level += 1
-            #topo
-            tp1 = TopologyEnum.ANY
-            tp2 = TopologyEnum.ANY
-            if len(sTopoList) != 0:
-                tp1 = sTopoList.pop(0)
-            if len(tTopoList) != 0:
-                tp2 = tTopoList.pop(0)
-            #expand S
-            expandList = []
-            for subLine in startLines:
-                e = self.expandLineWithTp(subLine, self.startSet, tp1)
-                e = sorted(e, key= lambda line: self.__sortLambda(line, goal))
-                expandList.extend(e)
-            self.startSet.setLines(expandList)
-            visitSource.append(expandList)   
-            path  = self.getSimilarityPath(expandList, template, self.targetSet)
-           
-            #topo
-            if (path != None):
-                if len(sTopoList) == 0:
-                    print("Find path success from source !")
-                    print("similarity: {}, path: {}".format(path.similarity, path))
-                    print("allCandidatesPath:", self.allCandidatePaths)
-                    for p in self.allCandidatePaths:
-                        p.draw('yellow')
-                    plt.show()
-                    break
+            self.showAlgoResult([traverseList], [[]], self.path)
+            plt.show()
  
-            startLines =   expandList
-
-            # #expand T
-            # expandListT = []
-            # for subLine in goalLines:
-            #     e = self.expandLineWithTp(subLine, self.targetSet, tp2)
-            #     # e = sorted(e, key= lambda line: self.__sortLambda(line, subLine.origin))
-            #     e = sorted(e, key= lambda line: self.__sortLambda(line, start))
-            #     expandListT.extend(e) 
-            # self.targetSet.setLines(expandListT)
-            # visitTarget.append(expandListT)
-            # tmpPath  = self.getSimilarityPath(expandListT, self.startSet)
-            # if (tmpPath != None):
-            #     print("Find path success from target !")
-            #     print("similarity: {}, path: {}".format(tmpPath.similarity, tmpPath))
-            #     path = tmpPath
-            #     break
-            # goalLines = expandListT
-
-        self.showAlgoResult(visitSource, visitTarget, path)
-        plt.show()
-    
     def createLineAll(self, coord: Point, tpDir:TopologyEnum=TopologyEnum.ANY):
         lines = []
         _,l1 = self.createLine(coord, AxisEnum.AXIS_X, tpDir)

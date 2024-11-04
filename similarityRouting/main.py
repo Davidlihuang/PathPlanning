@@ -49,7 +49,9 @@ def testMikamiTauchi(centerPts, obstacles, s_start, s_goal, multilayer= False):
 
     mkt = mikami.MikamiTauchi(rtGraph, multilayer)
 
-    mkt.findPathDfs2(s_start, s_goal, centerPts[0])
+    mkt.findPathWithTemplate(s_start, s_goal, centerPts[0])
+
+    
  
 if __name__ == '__main__':
 
@@ -60,7 +62,7 @@ if __name__ == '__main__':
     tpZ1    = [(4, 10, 0),(25,10, 0),(25,27, 0), (45,27, 0)]
     # tpZ1    = [(0,10, 0),(25,10, 0),(25,27, 0), (49,27, 0)]
     # ob      = [(45,19, 0), (43,19, 0), (43,27, 0), (45,27, 0)]
-    testMikamiTauchi([tpZ, tpZ1], [], s_start, s_goal, True)  
+    testMikamiTauchi([tpZ, tpZ1], [], s_start, s_goal, False)  
 
     # U shape
     s_start = (5, 5, 0)
@@ -104,7 +106,7 @@ if __name__ == '__main__':
     testMikamiTauchi([tpZ1, tpZ2], [], s_start, s_goal, True)
 
 
-    s_start = (20, 20, 0)
+    s_start = (10, 20, 0)
     s_goal  = (35, 34, 0)
-    tp      = [(20, 20, 0),(29,20, 0),(29,34, 0), (35, 34, 0)]
-    testMikamiTauchi([tpZ, tpZ1, tpZ2], [], s_start, s_goal, True)
+    tp      = [(10, 20, 0),(29,20, 0),(29,34, 0), (35, 34, 0)]
+    testMikamiTauchi([tp, tpZ1, tpZ2], [], s_start, s_goal, True)
