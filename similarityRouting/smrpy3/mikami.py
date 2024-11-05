@@ -437,8 +437,8 @@ class MikamiTauchi:
                     cdtPaths.append(path)
         return cdtPaths
  
-
-    def findPath(self, s, e):
+    
+    def findPath(self, s, e, tpS:TopologyEnum = TopologyEnum.ANY, tpT:TopologyEnum = TopologyEnum.ANY, ):
         #tmp
         visitSource = []
         visitTarget = []
@@ -454,11 +454,11 @@ class MikamiTauchi:
             return []
         
         #create s/t line
-        startLines     =  self.createLineAll(start)
+        startLines     =  self.createLineAll(start, tpS)
         self.startSet.setLines(startLines)
         for l in startLines:
             l.draw('red')
-        goalLines   = self.createLineAll(goal)
+        goalLines   = self.createLineAll(goal, tpT)
         self.targetSet.setLines(goalLines)
         for l in goalLines:
             l.draw('green') 
@@ -483,7 +483,7 @@ class MikamiTauchi:
             expandListT = []
             for subLine in goalLines:
                 e = self.expandLineWithTp(subLine, self.targetSet)
-                e = sorted(e, key= lambda line: self.__sortLambda(line, goal))
+                e = sorted(e, key= lambda line: self.__sortLambda(line, start))
                 expandListT.extend(e) 
             self.targetSet.setLines(expandListT)
             visitTarget.append(expandListT)
@@ -587,7 +587,7 @@ class MikamiTauchi:
         self.startSet.setLines(startLines)
         for l in startLines:
             l.draw('red')
-        goalLines   = self.createLineAll(goal, tTopoList.pop(0))
+        goalLines   = self.createLineAll(goal, tTopoList[0])
         self.targetSet.setLines(goalLines)
         for l in goalLines:
             l.draw('green') 
@@ -599,7 +599,7 @@ class MikamiTauchi:
 
         if self.path == None:
             print("Find Path failed with template! start find without template!")
-            self.findPath(s,e)
+            self.findPath(s,e, topo[0], tTopoList[0])
         else:
             self.showAlgoResult([traverseList], [[]], self.path)
             plt.show()
