@@ -6,7 +6,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "pythonPath": "/usr/bin/python2.7" // 修改为你的 Python 2.7 路径
+            "pythonPath": "/usr/bin/python3" // 修改为你的 Python 2.7 路径
         }
     ]
 }

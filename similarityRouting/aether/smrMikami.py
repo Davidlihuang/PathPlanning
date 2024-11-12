@@ -1,383 +1,17 @@
 
 # coding=utf-8
-
 from __future__ import division
 from __future__ import absolute_import
 import os
 import sys
 import math
 import copy
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from routingGraph import Grid3D
-import rtree
-from enum import Enum
-
-## data structure
-class TopologyEnum(Enum):
-    LEFT       = 0
-    RIGHT      = 1
-    UP         = 2
-    DOWN       = 3
-    FRONT      = 4  # VIA DRILL UP
-    BACK       = 5  # VIA DRILL DOWN
-    ANY        = -1
-
-class AxisEnum(Enum):
-    AXIS_X     = 0
-    AXIS_Y     = 1
-    AXIS_Z     = 2
-    AXIS_OTHER = -1
-    
-class Point(object):
-    def __init__(self, x, y, z):
-        self.x = x
-        self.y = y
-        self.z = z
-    def __eq__(self, other):
-        if not isinstance(other, Point):
-            return False
-        return (self.x == other.x) and (self.y == other.y) and (self.z == other.z)
-    def __hash__(self):
-        return hash((self.x, self.y, self.z))
-
-class Line(object): 
-    def __init__(self, st, ed):
-        self.id      = -1
-        self.origin  = st               #current line origin point
-        self.start   = st           #start point
-        self.end     = ed           #end   point
-        self.parent   = None         #{Line:Line}
-        self.pointSet      = []
-        self.axisDirect    = AxisEnum.AXIS_OTHER
-        self.lineDirect    = TopologyEnum.ANY
-    
-    def printLines(self):
-        print "origin:(", self.origin.x , self.origin.y, self.origin.z , ")"
-        print "start:(", self.start.x , self.start.y, self.start.z , ")"
-        print "end:(", self.end.x , self.end.y, self.end.z , ")\n"
-     
-    def setId(self, id):
-        self.id = id
-    def setOrigin(self, origin):
-        self.origin   = origin  
-    def setStart(self, pt):
-        self.start = pt
-    def setEnd(self, pt):
-        self.end = pt    
-    def setParent(self, line):
-        self.parent  = line
-    def setAxisType(self, axis):
-        self.axisDirect = axis
-    def setLineDirect(self, topo):
-        self.lineDirect = topo
-    def setAxisPoints(self, points, axis):
-        for p in points:
-            self.addPoint(p, axis)
-    def addPoint(self, pt):     
-        self.pointSet.append(pt)     
-    
-    def getCentroid(self):
-        x = abs(self.end.x - self.start.x)/2 + min(self.start.x, self.end.x)
-        y = abs(self.end.y - self.start.y)/2 + min(self.start.y, self.end.y)
-        z = abs(self.end.z - self.start.z)/2 + min(self.start.z, self.end.z)
-        pt = Point(x,y,z)
-        return pt
-    def getDirectionVector(self):
-        unitVec=[0,0,0]
-        if(self.start != self.end):
-            dx = self.end.x - self.start.x
-            dy = self.end.y - self.start.y
-            dz = self.end.z - self.start.z
-            norm    = math.sqrt(dx**2 + dy**2 + dz**2)
-            if abs(norm) < 1e-5:
-                return None
-            unitVec = [dx/norm, dy/norm, dz/norm]
-        return unitVec
-    def getLength(self, manhattan=True):
-        len = 0.0
-        if (manhattan):
-            len = abs(self.end.x - self.start.x) + abs(self.end.y - self.end.y) + abs(self.end.z - self.end.z)
-        else:
-            len =  math.sqrt( (self.end.x - self.start.x)**2 + (self.end.y - self.end.y)**2 + (self.end.z - self.end.z)**2 )
-        return len
-    def traceBack(self):
-        pts = []
-        parent = self
-        while (parent != None): 
-            pts.append(parent.origin)
-            parent = parent.parent
-        return pts
-    def isSelfEqual(self):
-        if (self.start.x == self.end.x and 
-            self.start.y == self.end.y and
-            self.start.z == self.end.z):
-            return True
-        else:
-            return False
-    def isEqual(self, line):
-        return self.start == line.start and self.end == line.end
-    def isParallel(self, line):
-        curVector = self.getDirectionVector()
-        lineVc    = line.getDirectionVector()
-        cross_product = (curVector[1] * lineVc[2] - curVector[2] * lineVc[1], 
-                         curVector[2] * lineVc[0] - curVector[0] * lineVc[2], 
-                         curVector[0] * lineVc[1] - curVector[1] * lineVc[0])
-    
-        #  如果叉积为零向量，则向量平行
-        return all(component == 0 for component in cross_product)
-    
-    # ---------------------------------------------------------------------------------------- #
-    #  判断两条线段是否共面  （任取两条线段的三个端点，计算这三个端点中随意构成的两个向量的叉积N【叉积垂直于三点构成的平面】；用叉积N与未曾参与计算的那个端点所在的向量做点积 若点积为0则两条线段共面）
-    # ---------------------------------------------------------------------------------------- #
-    # V1[[x1,y1, z1], [x2, y2, z2]]
-    # 计算两点表示的两个三维向量的叉积  N = [NX2-NX1, NY2-NY1, NZ2-NZ1]
-    def CrossProduct3D(self, V1, V2):
-        '''
-        计算端点表示的三维向量的叉积
-        :param V1: 两端点表示的向量  例如 V1=[[x1,y1, z1], [x2, y2, z2]]
-        :param V2: 两端点表示的向量  例如 V2=[[x1,y1, z1], [x2, y2, z2]]
-        :return: 两向量的叉积, 向量坐标表示的向量 例如 N = [Xn1, Yn1, Zn1]  (其中Xn1 = x2-x1 若N=[[x1,y1, z1], [x2, y2, z2]]）
-        '''
-        N = [(V1[1][1]-V1[0][1])*(V2[1][2]-V2[0][2]) - (V1[1][2]-V1[0][2])*(V2[1][1]-V2[0][1]),
-            -((V1[1][2]-V1[0][2])*(V2[1][0]-V2[0][0]) - (V1[1][0]-V1[0][0])*(V2[1][2]-V2[0][2])),
-            (V1[1][0]-V1[0][0])*(V2[1][1]-V2[0][1]) - (V1[1][1]-V1[0][1])*(V2[1][0]-V2[0][0])]
-        return N
-
-    # V1[V1X, V1Y, V1Z]
-    # 计算坐标表示的两个三维向量的点积
-    def DotProduct3D(self, V1, V2):
-        '''
-        计算向量坐标表示的三维向量的点积
-        :param V1: 向量坐标表示的向量 例如 V1 = [Xv1, Yv1, Zv1]  (其中Xv1 = x2-x1 若V1=[[x1,y1, z1], [x2, y2, z2]]）
-        :param V2: 向量坐标表示的向量 例如 V2 = [Xv2, Yv2, Zv2]
-        :return: 两向量的点积，数值
-        '''
-        Dot = V1[0]*V2[0] + V1[1]*V2[1] + V1[2]*V2[2]
-        return Dot
-
-    # V1[[x1,y1, z1], [x2, y2, z2]]
-    # V2[[x1,y1, z1], [x2, y2, z2]]
-    # 判断两条线段是否共面
-    def twoLineSegmentCoplanar3D(self, V1, V2):
-        '''
-        判断三维空间中的两条线段是否共面
-        :param V1: 两端点表示的向量  例如 V1=[[x1,y1, z1], [x2, y2, z2]]
-        :param V2: 两端点表示的向量  例如 V2=[[x1,y1, z1], [x2, y2, z2]]
-        :return: 若共面则True 否则False
-        '''
-        tempV1 = V1
-        tempV2 = [V1[0], V2[1]]
-        N = self.CrossProduct3D(tempV1, tempV2)
-        V2p = [V2[1][0]-V2[0][0], V2[1][1]-V2[0][1], V2[1][2]-V2[0][2]]
-        if abs(self.DotProduct3D(N, V2p)) <0.0001:
-            return True
-        else:
-            return False
-
- 
-    # 三维空间中快速排斥,快速排斥法  排除一部分不满足条件的线段
-    # Vo[[x1,y1, z1], [x2, y2, z2]]
-    def RapidRepel(self, Vo, Vp):
-        '''
-        快速排斥法，排除三维空间中不可能相交的线段
-        :param Vo: 两端点表示的向量  例如 Vo=[[x1,y1, z1], [x2, y2, z2]]
-        :param Vp: 两端点表示的向量  例如 Vp=[[x1,y1, z1], [x2, y2, z2]]
-        :return: 若通过快速排斥 则表示两线段可能相交 返回True; 否则 False
-        '''
-        if (        max(Vo[0][0], Vo[1][0]) >= min(Vp[0][0], Vp[1][0])
-                and min(Vo[0][0], Vo[1][0]) <= max(Vp[0][0], Vp[1][0])
-                and max(Vo[0][1], Vo[1][1]) >= min(Vp[0][1], Vp[1][1])
-                and min(Vo[0][1], Vo[1][1]) <= max(Vp[0][1], Vp[1][1])
-                and max(Vo[0][2], Vo[1][2]) >= min(Vp[0][2], Vp[1][2])
-                and min(Vo[0][2], Vo[1][2]) <= max(Vp[0][2], Vp[1][2])
-        ):
-            return True
-        else:
-            return False
-
-
-    # ---------------------------------------------------------------------------------------- #
-    #  跨立实验  若满足前面的两个条件  且通过跨立实验   则认为这两条线段是相交的  (这里先计算以一条线段的一个端点为起点与另一条线段的一个端点组成的向量tempV1，与该点为起点线段的向量的叉积N1；
-    #  再计算该点为起点线段的向量 与 该点为起点与另一条线段的另一个端点组成的向量TempV2 的叉积N2 计算N1、N2的点积 再以另一条线段为中间向量再进行计算 若两次计算的结果均大于0 则认为两条线段相交)
-    # ---------------------------------------------------------------------------------------- #
-    def StraddleExperiment(self, V1, V2):
-        '''
-        跨立实验，排除三维空间中不可能相交的线段
-        :param V1: 两端点表示的向量  例如 V1=[[x1,y1, z1], [x2, y2, z2]]
-        :param V2: 两端点表示的向量  例如 V2=[[x1,y1, z1], [x2, y2, z2]]
-        :return: 通过跨立实验 返回True，否则返回False
-        '''
-        tempV1 = [V1[0], V2[1]]
-        tempV2 = [V1[0], V2[0]]
-        N1 = self.CrossProduct3D(tempV1, V1)
-        N2 = self.CrossProduct3D(V1, tempV2)
-        res1 = self.DotProduct3D(N1, N2)
-
-        tempV3 = [V2[0], V1[1]]
-        tempV4 = [V2[0], V1[0]]
-        N3 = self.CrossProduct3D(tempV3, V2)
-        N4 = self.CrossProduct3D(V2, tempV4)
-        res2 = self.DotProduct3D(N3, N4)
-
-        if res1 > 0 and res2>0:
-            return True
-        else:
-            return False
-    
-    def isIntersect(self, line2):
-        pt = None
-        V1 = [[self.start.x, self.start.y, self.start.z], [self.end.x, self.end.y, self.end.z]]
-        V2 = [[line2.start.x, line2.start.y, line2.start.z], [line2.end.x, line2.end.y, line2.end.z]]
-        if self.twoLineSegmentCoplanar3D(V1, V2) and self.RapidRepel(V1, V2):
-            if self.StraddleExperiment(V1, V2):
-                # 线段的方向向量
-                p1 = [ self.start.x,  self.start.y,  self.start.z   ]
-                p2 = [ self.end.x,    self.end.y,    self.end.z     ]
-                p3 = [ line2.start.x, line2.start.y, line2.start.z]
-                p4 = [ line2.end.x,   line2.end.y,   line2.end.z  ]
-                d1 = [[0,0,0], [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]]]
-                d2 = [[0,0,0], [p4[0] - p3[0], p4[1] - p3[1], p4[2] - p3[2]]]
-                # 从p1到p3的向量
-                p13 = [[0,0,0],[p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]]]
-                # 计算叉乘
-                n = self.CrossProduct3D(d1, d2)
-                # 计算点到线段的参数
-                t = self.DotProduct3D(self.CrossProduct3D(p13, d2), n) / self.DotProduct3D(self.CrossProduct3D(d1, d2), n)
-                s = self.DotProduct3D(self.CrossProduct3D(p13, d1), n) / self.DotProduct3D(self.CrossProduct3D(d1, d2), n)
-
-                # 检查参数是否在0和1之间
-                if 0 <= t <= 1 and 0 <= s <= 1:
-                    intersection = (p1[0] + t * d1[1][0], p1[1] + t * d1[1][1], p1[2] + t * d1[1][2])
-                    pt = Point(intersection[0], intersection[1], intersection[2])
-                    return pt
-        return pt
-
-    
-    def isCover(self, line):        
-        if self.isParallel(line) == False:
-            return False
-        return self.isIntersect(line) != None
-
-    
-    def getIntersectionPoint(self, line):
-        resPt = self.isIntersect(line)
-        if resPt != None:
-            return resPt
-        else:
-            return None
-        
-    def draw(self,  cr=u'', lw=1, lsty=u'-', ):
-        crList = [u'red', u'blue', u'green', u'yellow',u'gold']
-        if cr ==u'':
-            cr = crList[int(self.start.z)]
-        plt.plot([self.start.x, self.end.x],[self.start.y, self.end.y],  linestyle=lsty, linewidth=lw, color=cr)
-        for pt in self.pointSet:
-            plt.plot(pt.x, pt.y, u'o', markersize=lw+0.5, color=u'Gray')
-class LineContainer(object):
-    def __init__(self):
-        self.lines                = [[],[],[]]     #[[x:Line], [y:Line], [z:Line]] 
-        self.container            = [rtree.index.Index(), rtree.index.Index(),rtree.index.Index()]
-        self.lineDict             = dict()
-    def __calSize(self):
-        len = 0
-        for lineList in self.lines:
-            len += len(lineList)
-        return len
-    def queryIntersect(self, line):
-        itsList = []
-        minPoint = Point(min(line.start.x, line.end.x), min(line.start.y, line.end.y), min(line.start.z, line.end.z))
-        maxPoint = Point(max(line.start.x, line.end.x), max(line.start.y, line.end.y), max(line.start.z, line.end.z))
-
-        for item in self.container:
-            intersecting_segments = item.intersection((minPoint.x, minPoint.y, maxPoint.x, maxPoint.y))
-            for sid in intersecting_segments:
-                curLine = self.lineDict[sid]
-                 
-                if curLine.isIntersect(line) != None:
-                    itsList.append(curLine)
-        return itsList
-    def queryIntersectByAll(self, line):
-        itsList = []
-        for item in self.lines:
-            for curLine in item:                 
-                if curLine.isIntersect(line) != None:
-                    itsList.append(curLine)
-        return itsList
-  
-    def getLines(self, axis):
-        if (axis == AxisEnum.AXIS_X):
-            return self.lines[0]
-        elif (axis == AxisEnum.AXIS_Y):
-            return self.lines[1]
-        elif (axis == AxisEnum.AXIS_Z):
-            return self.lines[2]
-        else:
-            return []
-        
-    def setLines(self, lines):
-        for line in lines:
-            self.addLine(line, line.axisDirect)
-
-    def addLine(self, line, axis):
-        if(axis < AxisEnum.AXIS_X or axis > AxisEnum.AXIS_Z):
-            print u"Error: invalid index:{}".format(axis)
-            return
-
-        self.lines[axis].append(line)
-        self.lineDict[line.id] = line
-        
-        #add to RTree
-        minPoint = Point(min(line.start.x, line.end.x), min(line.start.y, line.end.y), min(line.start.z, line.end.z))
-        maxPoint = Point(max(line.start.x, line.end.x), max(line.start.y, line.end.y), max(line.start.z, line.end.z))
-        self.container[axis].insert(int(line.id), (minPoint.x, minPoint.y, maxPoint.x, maxPoint.y), obj=line)
-
-class Path(object):
-    def __init__(self):
-        self.segs = []
-        self.vias = []
-        self.shapes = []
-        self.similarity = 0.0
-
-    def setSimilarity(self, sim):
-        self.similarity = sim
-
-    def addSeg(self, seg):
-        self.segs.append(seg)
-    def getLength(self):
-        tLen = 0.0
-        for seg in self.segs:
-            tLen += seg.getLength()
-        return tLen
-    def draw(self, cr=u'', width = 6):
-        for seg in self.segs:
-            seg.draw(cr, width) 
-    def printSegs(self):
-        for seg in self.segs:
-            print seg.printLines()
-    def getCenterPoints(self):
-        pts=[]
-        if len(self.segs) == 1:
-            pts.append((self.segs[0].start.x, self.segs[0].start.y, self.segs[0].start.z))
-            pts.append((self.segs[0].end.x, self.segs[0].end.y, self.segs[0].end.z))
-        elif len(self.segs) >1:
-            for i in range(len(self.segs)-1):
-                seg1 = self.segs[i]
-                seg2 = self.segs[i+1]
-                if i == (len(self.segs)-2):
-                    pts.append((seg1.start.x, seg1.start.y, seg1.start.z)) 
-                    if seg1.end != seg2.start:
-                        pts.append((seg1.end.x, seg1.end.y, seg1.end.z))
-                    pts.append((seg2.start.x, seg2.start.y, seg2.start.z)) 
-                    pts.append((seg2.end.x, seg2.end.y, seg2.end.z))
-                else:
-                    pts.append((seg1.start.x, seg1.start.y, seg1.start.z))
-                    if seg1.end != seg2.start:
-                        pts.append((seg1.end.x, seg1.end.y, seg1.end.z))
-        return pts
-
-                         
+from smrRouteGraph import Grid3D, Point, Line, LineContainer, Path
+from smrRouteGraph import TopologyEnum, AxisEnum
+import matplotlib.pyplot as plt                  
 class MikamiTauchi(object):
     def __init__(self, rtGraph, enMultiLyr = True):
         self.rtGraph    = rtGraph
@@ -468,9 +102,11 @@ class MikamiTauchi(object):
                 tp.append(TopologyEnum.BACK)
             elif t == TopologyEnum.BACK:
                 tp.append(TopologyEnum.FRONT)
-        print "tp:", tp
         return tp    
     def __calSimilarity(self, path, template):
+        simValue = 0.0
+        if(path == None): 
+            return simValue
         orgTp = self.__topologyExtract(template)
 
         centerLine = path.getCenterPoints()
@@ -484,24 +120,24 @@ class MikamiTauchi(object):
                 count += 1
             else:
                 break
-        simValue = 0.0
+        
         if(len(orgTp) > len(resTp)):
             simValue = count/len(orgTp)
         else:
             simValue = count/len(resTp)
-        print u"Similarity: {}\n".format(simValue)
+        print(u"Similarity: {0}\n".format(simValue))
         return simValue    
     def __beExtendInAxis(self, ePt, dir):
-        return (ePt in self.allPointsDT and self.allPointsDT[ePt][dir] == 1)  
+        return (ePt in self.allPointsDT and self.allPointsDT[ePt][dir.value] == 1)  
     def __duplicateProcess(self, ln):
         if ln !=None:
             for point in ln.pointSet:
                 state = [0,0,0]
                 if point not in self.allPointsDT:
-                    state[ln.axisDirect] =  1
+                    state[ln.axisDirect.value] =  1
                     self.allPointsDT[point] = state
                 else:
-                    self.allPointsDT[point][ln.axisDirect] = 1
+                    self.allPointsDT[point][ln.axisDirect.value] = 1
     def __extendNoDuplicate(self, pLine, axisDir,  tpDir=TopologyEnum.ANY):
         lines = []
         for pt in pLine.pointSet:
@@ -538,6 +174,8 @@ class MikamiTauchi(object):
         for i in range(len(pts)-1):
             start = pts[i]
             end   = pts[i+1]
+            if(start.x== end.x and start.y == end.y and start.z != end.z):
+                continue
             if(start == end):
                 continue
             ln  = Line(start, end)
@@ -580,6 +218,7 @@ class MikamiTauchi(object):
  
     
     def findPath(self, s, e, tpS = TopologyEnum.ANY, tpT = TopologyEnum.ANY, ):
+        self.allPointsDT= {}
         #tmp
         visitSource = []
         visitTarget = []
@@ -588,28 +227,28 @@ class MikamiTauchi(object):
         goal  = Point(e[0], e[1], e[2])
         # invalid
         if self.rtGraph.is_occupied((start.x, start.y, start.z)):
-            print u"Start is occupied!"
+            print(u"Start is occupied!")
             return []
         if self.rtGraph.is_occupied((goal.x, goal.y, goal.z)):
-            print u"Target is occupied"
+            print(u"Target is occupied")
             return []
         
         #create s/t line
         startLines     =  self.createLineAll(start, tpS)
         self.startSet.setLines(startLines)
-        for l in startLines:
-            l.draw(u'red')
+        # for l in startLines:
+        #     l.draw(u'red')
         goalLines   = self.createLineAll(goal, tpT)
         self.targetSet.setLines(goalLines)
-        for l in goalLines:
-            l.draw(u'green') 
+        # for l in goalLines:
+        #     l.draw(u'green') 
         
         path =  self.getBestLengthPath(startLines, self.targetSet)
         while len(startLines) !=0 and len(goalLines)!=0 and path ==None:
             #expand S
             expandList = []
             for subLine in startLines:
-                e = self.expandLineWithTp(subLine, self.startSet)
+                e = self.expandLine(subLine, self.startSet)
                 e = sorted(e, key= lambda line: self.__sortLambda(line, goal))
                 expandList.extend(e)
             self.startSet.setLines(expandList)
@@ -617,14 +256,14 @@ class MikamiTauchi(object):
             path  = self.getBestLengthPath(expandList, self.targetSet)
             if (path != None):
                 self.path = path
-                print u"Find path success from source !"
+                print(u"Find path success from source !")
                 break
             startLines =   expandList
 
             #expand T
             expandListT = []
             for subLine in goalLines:
-                e = self.expandLineWithTp(subLine, self.targetSet)
+                e = self.expandLine(subLine, self.targetSet)
                 e = sorted(e, key= lambda line: self.__sortLambda(line, start))
                 expandListT.extend(e) 
             self.targetSet.setLines(expandListT)
@@ -632,7 +271,7 @@ class MikamiTauchi(object):
             path  = self.getBestLengthPath(expandListT, self.startSet)
             if (path != None):
                 self.path = path
-                print u"Find path success from target !"
+                print(u"Find path success from target !")
                 break
             goalLines = expandListT
         
@@ -641,10 +280,10 @@ class MikamiTauchi(object):
     def dfs(self, traversed, curLine,  start, goal, sTopoList, template, level):
         curTopoList = copy.deepcopy(sTopoList)  
         tp = TopologyEnum.ANY
-        print u"curLevel:{0}, len(topList):{1}".format(level, len(curTopoList))
+        # print(u"curLevel:{0}, len(topList):{1}".format(level, len(curTopoList))
         if len(curTopoList) != 0:
             tp = curTopoList.pop(0)    
-        print u"currentTopo:{}".format(tp)
+        # print(u"currentTopo:{0}".format(tp)
         if curLine not in traversed:
             if self.path != None:
                 return
@@ -652,7 +291,7 @@ class MikamiTauchi(object):
             path  = self.getSimilarityPath([curLine], template, self.targetSet)
             if path != None and len(curTopoList)==0:
                 self.path = path
-                print u"find Path"
+                print(u"find Path")
                 return 
             
             if  len(curTopoList)==0:
@@ -689,25 +328,27 @@ class MikamiTauchi(object):
 
             
     def findPathWithTemplate(self, s, e, template=[]):
+        self.allPointsDT= {}
         #calculate topology
+        print("template:", template)
         topo = self.__topologyExtract(template)
-
+        
         #tmp
         start = Point(s[0], s[1], s[2])
         goal  = Point(e[0], e[1], e[2])
 
         # Invalid Judgement
         if self.rtGraph.is_occupied((start.x, start.y, start.z)):
-            print u"Start is occupied!"
+            print(u"Start is occupied!")
             return []
         if self.rtGraph.is_occupied((goal.x, goal.y, goal.z)):
-            print u"Target is occupied"
+            print(u"Target is occupied")
             return []
         
         #topo proccess
         mirroTopo = self.__getMirrorTopo(topo)
-        print u"Topo", topo
-        print u"mirroTopo", mirroTopo
+        print(u"Topo:", topo)
+        print(u"mirroTopo:", mirroTopo)
         
 
         sTopoList = [TopologyEnum.ANY]
@@ -741,16 +382,21 @@ class MikamiTauchi(object):
 
 
         if self.path == None:
-            print u"Find Path failed with template! start find without template!"
+            print(u"Find Path failed with template! start find without template!")
             self.findPath(s,e, topo[0], tTopoList[0])
-            self.path.similarity = self.__calSimilarity(self.path, sTmpList)
-            print "Path: ", self.path.printSegs()
-            self.showAlgoResult([traverseList], [[]], self.path)
-            plt.show()
-        else:
-            self.showAlgoResult([traverseList], [[]], self.path)
-            plt.show()
- 
+            if( self.path != None):
+                self.path.similarity = self.__calSimilarity(self.path, sTmpList) 
+             
+        self.showAlgoResult([traverseList], [goalLines], self.path)
+        if self.path !=None:
+            for seg in self.path.segs:
+                s = self.rtGraph.gPoint2point([seg.start.x, seg.start.y, seg.start.z])
+                t = self.rtGraph.gPoint2point([seg.end.x, seg.end.y, seg.end.z])
+                seg.start = Point(s[0], s[1], s[2])
+                seg.end   = Point(t[0], t[1], t[2])
+        
+        return self.path
+
     def createLineAll(self, coord, tpDir=TopologyEnum.ANY):
         lines = []
         _,l1 = self.createLine(coord, AxisEnum.AXIS_X, tpDir)
@@ -930,6 +576,98 @@ class MikamiTauchi(object):
                 l.draw(u'gray')
         
         if path != None:
-            print u"Path similarity: ", path.similarity
+            print(u"Path similarity: ", path.similarity)
             path.draw()
-        
+
+def testMikamiTauchi(centerPts, obstacles, s_start, s_goal, multilayer= False):
+    u""" mikami-tauchi algorithm test
+    Args:
+        centerPts list[tuple(0,0,0), ...]:            The center line of template
+        obstacles list[[(0,0,0),(0,0,0)], poly2,...]: The obstacle for current layout
+        s_start tuple(0,1,1):   The start point for target net
+        s_goal  tuple(0,2,12):  The goal point for target net
+        multilayer (bool, optional): Whether support multi-layer routing. Defaults to False.
+    """
+    #Initialized the  routing graph
+    w, h, l,r = 50, 50, 3,1
+    rtGraph =  Grid3D(w, h, l, r)
+
+    #Initialize layout obstacle to routing graph
+    path_obs=[]
+    if(len(centerPts) >1):
+        for i in range(1, len(centerPts)):
+            path_obs     = rtGraph.setNetTemplate(centerPts[i], 0, 2)  #show z template obstacle
+            obstacles.extend(path_obs)
+    rtGraph.set_obstacle(obstacles) 
+    #show design
+    # fig, ax = plt.subplots(figsize=(w, h)) 
+    # ax.set_xlim(0, w + 0.1)
+    # ax.set_ylim(0, h + 0.1)
+    # rtGraph.drawShapelyPolygon(fig, ax, obstacles,  u"black", 1)
+    # templateShow   = rtGraph.setNetTemplate(centerPts[0], 0, 2)  #tempalte   Z
+    # rtGraph.drawShapelyPolygon(fig, ax, templateShow,  u"yellow", 0.4)
+
+    #Find current net's path with template
+    mkt =  MikamiTauchi(rtGraph, multilayer)
+    mkt.findPathWithTemplate(s_start, s_goal, centerPts[0])
+
+    print(u"Routing finish!\n")
+    
+if __name__ == u'__main__':
+    # Z shape
+    s_start = (4, 15, 0)
+    s_goal  = (40, 5, 0)
+    tpZ     = [(4,15, 0),(28,15, 0),(28,5, 0), (40,5, 0)]
+    tpZ1    = [(4, 10, 0),(25,10, 0),(25,27, 0), (45,27, 0)]
+    # tpZ1    = [(0,10, 0),(25,10, 0),(25,27, 0), (49,27, 0)]
+    # ob      = [(45,19, 0), (43,19, 0), (43,27, 0), (45,27, 0)]
+    testMikamiTauchi([tpZ, tpZ1], [], s_start, s_goal, True)  
+
+    # U shape
+    s_start = (5, 5, 0)
+    s_goal  = (20, 5, 0)
+    tpZ     = [(5,5, 0),(5,40, 0),(20,40, 0), (20, 5, 0)]
+    ob      = [[20, 15,0], [30, 15,0], [30, 20,0], [20, 20,0]]  
+    # testMikamiTauchi([tpZ], [], s_start, s_goal, True)
+    # testMikamiTauchi([tpZ], [ob], s_start, s_goal, True)
+
+    # snake shape
+    s_start = (30,10, 0)
+    s_goal  = (45, 45, 0)
+    tpZ     = [(30,10,0),(30,45,0),(40,45,0), (40,10,0),(45, 10,0), (45, 45,0)]
+    # ob      = [[20, 15,0], [27, 15,0], [27, 20,0], [20, 20,0]]
+    ob1      = [[37, 15,0], [41, 15,0], [41, 20,0], [37, 20,0]]
+    # ob2      = [[37, 15,0], [46, 15,0], [46, 20,0], [37, 20,0]]
+    # testMikamiTauchi([tpZ], [ob1], s_start, s_goal, True)
+
+    # O shape
+    s_start = (20, 20, 0)
+    s_goal  = (22, 20, 0)
+    tpZ     = [(20,20,0), (10, 20,0), (10, 5,0), (30, 5,0), (30, 20,0), (22, 20,0)]
+    ob      = [[20, 3,0], [22, 3,0], [22, 10,0], [20, 10,0]]
+    ob1     = [[27, 10,0], [33, 10,0], [33, 15,0], [27, 15,0]]
+    # testMikamiTauchi([tpZ], [ob, ob1], s_start, s_goal, True)
+    
+    s_start = (6, 24, 0)
+    s_goal  = (4, 24, 0)
+    tpZ     = [(6, 24, 0), (17,24,0), (17, 4, 0), (4, 4, 0),(4,24,0)]
+    tpZ1    = [(6,10,0),(10,10,0),(10,16,0),(6,16,0)]
+    tpZ2    = [(6,7,0), (14, 7, 0),(14, 20, 0), (6, 20,0)]
+    # ob      = [(20, 15, 0), (30, 15,0), (30, 20,0), (20, 20,0)]
+    # testMikamiTauchi([tpZ, tpZ1, tpZ2], [], s_start, s_goal, True)
+
+    # cross lines
+    s_start = (20, 30, 0)
+    s_goal  = (40, 25, 0)
+    tpZ1     = [(20,30, 0),(20,25, 0),(25,25, 0), (25,15, 0), (35,15, 0), (35,25, 0), (40,25, 0)]
+    tpZ2    = [(24,40, 0),(24,30, 0),(30, 30, 0), (30,20, 0)]
+    # tpZ1    = [(0,10, 0),(25,10, 0),(25,27, 0), (49,27, 0)]
+    ob      = [(20, 15, 0), (30, 15,0), (30, 20,0), (20, 20,0)]
+    testMikamiTauchi([tpZ1, tpZ2], [], s_start, s_goal, True)
+
+
+    s_start = (10, 20, 0)
+    s_goal  = (35, 34, 0)
+    tp      = [(10, 20, 0),(29,20, 0),  (29,34, 0),(35, 34, 0)]
+    # tp      = [(10, 20, 0),(29,20, 0),(29,20, 1), (29,34, 1), (29,34, 0),(35, 34, 0)]
+    testMikamiTauchi([tp, tpZ1, tpZ2], [], s_start, s_goal, True)
